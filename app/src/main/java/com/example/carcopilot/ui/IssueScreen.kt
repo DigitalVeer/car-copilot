@@ -35,7 +35,12 @@ import com.example.carcopilot.ui.components.TopBarLeft
 import com.example.carcopilot.ui.theme.CarCopilotColors
 
 @Composable
-fun IssueScreen(issue: Issue, gemma: GemmaService, onBack: () -> Unit) {
+fun IssueScreen(
+    issue: Issue,
+    gemma: GemmaService,
+    onBack: () -> Unit,
+    onWalkthrough: () -> Unit = {},
+) {
     var state by remember { mutableStateOf<SynthesisState>(SynthesisState.Thinking) }
     var evidenceOpen by remember { mutableStateOf(false) }
 
@@ -97,6 +102,7 @@ fun IssueScreen(issue: Issue, gemma: GemmaService, onBack: () -> Unit) {
                 issue = issue,
                 primaryLabel = "Walk me through the fix →",
                 ghostLabel = "Send this to a mechanic instead",
+                onPrimary = onWalkthrough,
             )
             EvidenceToggle(open = evidenceOpen, onClick = { evidenceOpen = !evidenceOpen })
             AnimatedVisibility(

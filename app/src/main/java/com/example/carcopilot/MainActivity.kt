@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.carcopilot.model.Fixtures
 import com.example.carcopilot.ui.HomeScreen
 import com.example.carcopilot.ui.IssueScreen
+import com.example.carcopilot.ui.WalkthroughScreen
 import com.example.carcopilot.ui.theme.CarCopilotTheme
 
 class MainActivity : ComponentActivity() {
@@ -38,7 +39,25 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(misfire = misfire, onIssueClick = { nav.navigate("issue") })
                         }
                         composable("issue") {
-                            IssueScreen(issue = misfire, gemma = gemma, onBack = { nav.popBackStack() })
+                            IssueScreen(
+                                issue = misfire,
+                                gemma = gemma,
+                                onBack = { nav.popBackStack() },
+                                onWalkthrough = { nav.navigate("walkthrough") },
+                            )
+                        }
+                        composable("walkthrough") {
+                            WalkthroughScreen(
+                                issue = misfire,
+                                onBack = { nav.popBackStack() },
+                                onFinish = {
+                                    nav.popBackStack(route = "home", inclusive = false)
+                                },
+                                onHomeTab = {
+                                    nav.popBackStack(route = "home", inclusive = false)
+                                },
+                                onHistoryTab = { /* Phase 7C will wire this */ },
+                            )
                         }
                     }
                 }

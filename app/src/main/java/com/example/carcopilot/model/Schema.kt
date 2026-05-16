@@ -33,6 +33,13 @@ data class DTC(
     val deferred: Boolean = false,
 )
 
+data class WalkthroughStep(
+    val number: Int,
+    val title: String,
+    val body: String,
+    val diagramHint: String? = null,
+)
+
 data class LiveReading(
     val key: String,
     val value: String,
@@ -52,4 +59,6 @@ data class Issue(
     val meta: IssueMeta,
     val dtcs: List<DTC>,
     val liveReadings: List<LiveReading>,
+    val walkthroughSteps: List<WalkthroughStep> = emptyList(),
+    val mechanicDraft: String? = null,
 )
