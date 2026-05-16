@@ -13,3 +13,12 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Gemma model files — never commit (multi-GB)
+*.litertlm
+*.task
+/models/
+
+# Claude Code session state
+/.claude/
+
