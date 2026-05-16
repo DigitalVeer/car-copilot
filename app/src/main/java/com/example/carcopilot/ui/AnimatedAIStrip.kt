@@ -1,5 +1,7 @@
 package com.example.carcopilot.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,8 +72,26 @@ fun AnimatedAIStrip(
 
 @Composable
 private fun AiBody(state: SynthesisState, severity: Severity) {
+    // Crossfade only on the Thinking → resolved threshold so per-token
+    // Streaming updates flow as plain recompositions and don't re-trigger
+    // the 200ms fade on every append.
+    Crossfade(
+        targetState = state is SynthesisState.Thinking,
+        animationSpec = tween(durationMillis = 200),
+        label = "ai-strip-body",
+    ) { thinking ->
+        if (thinking) {
+            ThinkingDots(severity)
+        } else {
+            ResolvedBody(state)
+        }
+    }
+}
+
+@Composable
+private fun ResolvedBody(state: SynthesisState) {
     when (state) {
-        is SynthesisState.Thinking -> ThinkingDots(severity)
+        is SynthesisState.Thinking -> Unit // unreachable inside the false Crossfade branch
         is SynthesisState.Streaming -> Text(
             text = state.partial,
             style = CarCopilotTypography.AiBody,

@@ -1,5 +1,11 @@
 package com.example.carcopilot.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -93,7 +99,13 @@ fun IssueScreen(issue: Issue, gemma: GemmaService, onBack: () -> Unit) {
                 ghostLabel = "Send this to a mechanic instead",
             )
             EvidenceToggle(open = evidenceOpen, onClick = { evidenceOpen = !evidenceOpen })
-            if (evidenceOpen) {
+            AnimatedVisibility(
+                visible = evidenceOpen,
+                enter = expandVertically(animationSpec = tween(300)) +
+                    fadeIn(animationSpec = tween(300)),
+                exit = shrinkVertically(animationSpec = tween(300)) +
+                    fadeOut(animationSpec = tween(300)),
+            ) {
                 EvidenceSection(dtcs = issue.dtcs, readings = issue.liveReadings)
             }
         }

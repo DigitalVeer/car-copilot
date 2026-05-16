@@ -1,5 +1,7 @@
 package com.example.carcopilot.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,7 +64,6 @@ fun EvidenceToggle(
             style = CarCopilotTypography.SectionLabel,
             color = CarCopilotColors.TextMute,
         )
-        // Static chevron — Phase D adds the rotation animation.
         Chevron(rotated = open)
     }
 }
@@ -166,14 +168,19 @@ private fun LiveReadingRow(reading: LiveReading, isLast: Boolean) {
     }
 }
 
-/** Down-pointing chevron, rotates 180° when `rotated` is true. */
+/** Down-pointing chevron, animates a 180° rotation when `rotated` flips. */
 @Composable
 private fun Chevron(rotated: Boolean) {
     val tint = CarCopilotColors.TextMute
+    val rotation by animateFloatAsState(
+        targetValue = if (rotated) 180f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "evidence-chevron",
+    )
     Canvas(
         modifier = Modifier
             .size(10.dp)
-            .graphicsLayer { rotationZ = if (rotated) 180f else 0f },
+            .graphicsLayer { rotationZ = rotation },
     ) {
         val w = size.width
         val h = size.height
