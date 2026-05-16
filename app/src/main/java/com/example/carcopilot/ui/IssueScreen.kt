@@ -55,7 +55,12 @@ fun IssueScreen(issue: Issue, gemma: GemmaService, onBack: () -> Unit) {
         try {
             gemma.streamSynthesis(issue).collect { delta ->
                 buf.append(delta)
-                state = SynthesisState.Streaming(buf.toString())
+                val progress = extractSynthesisInProgress(buf.toString())
+                if (progress.partial.isNotEmpty()) {
+                    state = SynthesisState.Streaming(progress.partial)
+                }
+                // Else keep Thinking — the model is still emitting the JSON
+                // envelope (`{"synthesis": "`) and there's nothing to show yet.
             }
             state = if (buf.isEmpty()) {
                 SynthesisState.Ready(FALLBACK_SYNTHESIS_MISFIRE, FALLBACK_GOOD_NEWS_MISFIRE, isFallback = true)

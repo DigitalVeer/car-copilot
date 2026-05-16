@@ -20,6 +20,60 @@ sealed interface SynthesisState {
 private val tolerantJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
 /**
+ * Result of scanning a partial streaming buffer for the in-progress
+ * `synthesis` field value. [partial] is the decoded content seen so far
+ * (with JSON escapes resolved). [complete] is true once the unescaped
+ * closing quote is reached.
+ */
+data class SynthesisProgress(val partial: String, val complete: Boolean)
+
+/**
+ * Extract the synthesis field's currently-streamed content from a partial
+ * JSON buffer. Used during streaming to show only the synthesis text in
+ * the AI strip — not the raw `{"synthesis": "..."` envelope.
+ *
+ * Returns an empty partial until the opener `"synthesis": "` has been
+ * seen. Past the opener, walks the buffer character by character and
+ * decodes JSON string escapes incrementally so the displayed text never
+ * contains a stray backslash or half-finished `\u` escape.
+ */
+fun extractSynthesisInProgress(buffer: String): SynthesisProgress {
+    val match = SYNTHESIS_OPENER.find(buffer) ?: return SynthesisProgress("", false)
+    val sb = StringBuilder()
+    var i = match.range.last + 1
+    while (i < buffer.length) {
+        val c = buffer[i]
+        when {
+            c == '\\' -> {
+                if (i + 1 >= buffer.length) break  // wait for the escape char
+                when (val esc = buffer[i + 1]) {
+                    '"' -> sb.append('"').also { i += 2 }
+                    '\\' -> sb.append('\\').also { i += 2 }
+                    '/' -> sb.append('/').also { i += 2 }
+                    'n' -> sb.append('\n').also { i += 2 }
+                    't' -> sb.append('\t').also { i += 2 }
+                    'r' -> sb.append('\r').also { i += 2 }
+                    'b' -> sb.append('\b').also { i += 2 }
+                    'f' -> sb.append('\u000C').also { i += 2 }
+                    'u' -> {
+                        if (i + 6 > buffer.length) return SynthesisProgress(sb.toString(), false)
+                        val cp = buffer.substring(i + 2, i + 6).toIntOrNull(16)
+                            ?: return SynthesisProgress(sb.toString(), false)
+                        sb.append(cp.toChar()); i += 6
+                    }
+                    else -> { sb.append(esc); i += 2 }
+                }
+            }
+            c == '"' -> return SynthesisProgress(sb.toString(), true)
+            else -> { sb.append(c); i++ }
+        }
+    }
+    return SynthesisProgress(sb.toString(), false)
+}
+
+private val SYNTHESIS_OPENER = Regex("\"synthesis\"\\s*:\\s*\"")
+
+/**
  * Parse the assembled Gemma response (post-streaming) into a Ready state, or
  * fall back if the JSON can't be recovered. Mirrors the tolerant parser in
  * GemmaSmokeTest + gemma_adapter.py.
