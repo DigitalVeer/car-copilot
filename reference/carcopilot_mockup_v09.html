@@ -1,0 +1,1737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAR·COPILOT — multi-screen mockup v0.9</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas: #f4f1ea;
+  --canvas-dot: rgba(0,0,0,0.05);
+  --ink: #1a1814;
+  --ink-mute: #6b675e;
+  --ink-faint: #a8a49a;
+  --line: rgba(0,0,0,0.08);
+  --accent: #f5c518;
+  --accent-deep: #1a1400;
+  --severe: #e44545;
+  --healthy: #4ade80;
+  --phone-bg: #0a0a0a;
+  --phone-card: #141414;
+  --phone-card-soft: #101010;
+  --phone-text: #ebebe8;
+  --phone-text-mute: #8c8c87;
+  --phone-text-faint: #5a5a55;
+  --phone-text-ghost: #444;
+  --phone-line: rgba(255,255,255,0.06);
+  --phone-line-bright: rgba(255,255,255,0.12);
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100vh; }
+body {
+  font-family: var(--font-sans);
+  background: var(--canvas);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  padding: 32px 40px 60px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 28px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+}
+.brand .bd { display: inline-block; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; margin: 0 2px; vertical-align: 3px; }
+.brand-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+.topmeta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+  text-align: right;
+  line-height: 1.7;
+}
+.topmeta b { color: var(--ink); font-weight: 500; }
+
+.stage {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 48px;
+  align-items: start;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.picker { position: sticky; top: 32px; }
+.conn-toggle {
+  padding: 0 14px 18px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.conn-toggle-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+.conn-toggle-row { display: flex; gap: 6px; }
+.conn-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  color: var(--ink-mute);
+  letter-spacing: 0.08em;
+}
+.conn-btn.active {
+  background: var(--ink);
+  color: var(--canvas);
+  border-color: var(--ink);
+}
+.conn-btn.offline.active {
+  background: var(--severe);
+  border-color: var(--severe);
+  color: #fff;
+}
+
+.picker-group { margin-bottom: 24px; }
+.picker-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  padding-left: 14px;
+}
+.picker-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  padding: 10px 14px 12px;
+  margin-bottom: 2px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: border-color 0.15s, background 0.15s;
+}
+.picker-item:hover { background: rgba(0,0,0,0.025); }
+.picker-item.active {
+  border-left-color: var(--accent);
+  background: rgba(245,197,24,0.07);
+}
+.picker-row { display: flex; align-items: baseline; gap: 10px; }
+.picker-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  min-width: 18px;
+}
+.picker-name { font-size: 14px; font-weight: 500; line-height: 1.3; }
+.picker-hint {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-top: 3px;
+  padding-left: 28px;
+  line-height: 1.4;
+}
+
+.phone-area { display: flex; flex-direction: column; align-items: center; }
+.phone-shell {
+  width: 380px;
+  height: 800px;
+  background: var(--phone-bg);
+  border-radius: 44px;
+  padding: 12px;
+  border: 1px solid #2a2a28;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.4) inset,
+    0 30px 60px -20px rgba(0,0,0,0.25),
+    0 12px 24px -12px rgba(0,0,0,0.15);
+  position: relative;
+}
+.phone-shell::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 110px;
+  height: 28px;
+  background: #000;
+  border-radius: 16px;
+  z-index: 10;
+}
+.phone {
+  width: 100%;
+  height: 100%;
+  background: var(--phone-bg);
+  border-radius: 32px;
+  overflow: hidden;
+  color: var(--phone-text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+}
+.statusbar {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 28px 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #c0c0c0;
+  font-weight: 500;
+}
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fade 0.25s ease;
+}
+.screen[hidden] { display: none; }
+@keyframes fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.screen-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 22px 20px;
+}
+.screen-content::-webkit-scrollbar { width: 4px; }
+.screen-content::-webkit-scrollbar-track { background: transparent; }
+.screen-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.p-top {
+  padding: 6px 22px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 12px;
+  min-height: 42px;
+}
+.p-top-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.p-mark {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  font-weight: 500;
+}
+.p-mdot { display: inline-block; width: 4px; height: 4px; background: var(--accent); border-radius: 50%; margin: 0 1px; vertical-align: 2px; }
+.p-veh {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-mute);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+.p-back {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--phone-text-mute);
+  background: transparent;
+  border: none;
+  padding: 6px 8px 6px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.p-back svg { width: 13px; height: 13px; }
+.p-back:hover { color: var(--phone-text); }
+
+.offline-pill {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background: rgba(228,69,69,0.13);
+  color: #ff9090;
+  padding: 5px 10px;
+  border-radius: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  flex-shrink: 0;
+}
+.offline-pill svg { width: 12px; height: 12px; }
+body.offline .offline-pill { display: inline-flex; }
+
+.p-ai {
+  border-left: 2px solid var(--accent);
+  padding: 4px 0 4px 14px;
+  margin-bottom: 32px;
+  min-height: 60px;
+}
+.p-ai.severe { border-left-color: var(--severe); }
+.p-ai.healthy { border-left-color: var(--healthy); }
+.p-ailabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.p-ai.severe .p-ailabel { color: var(--severe); }
+.p-ai.healthy .p-ailabel { color: var(--healthy); }
+.p-aitext {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--phone-text);
+  animation: fadeIn 0.4s ease;
+}
+.p-aitext .y { color: var(--accent); font-weight: 500; }
+.p-aitext .r { color: var(--severe); font-weight: 500; }
+.p-aitext .g { color: var(--healthy); font-weight: 500; }
+.p-aitext + .p-aitext { margin-top: 10px; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.p-think {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.p-think .dots { display: inline-flex; gap: 4px; }
+.p-think .dots span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  animation: bounce 1.2s ease-in-out infinite;
+}
+.p-think .dots span:nth-child(2) { animation-delay: 0.15s; }
+.p-think .dots span:nth-child(3) { animation-delay: 0.3s; }
+.p-think-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-mute);
+  letter-spacing: 0.06em;
+}
+.p-ai.thinking .p-aitext { display: none; }
+.p-ai.thinking .p-think { display: flex; }
+.p-ai.severe .p-think .dots span { background: var(--severe); }
+.p-ai.healthy .p-think .dots span { background: var(--healthy); }
+@keyframes bounce {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+
+.p-card {
+  background: var(--phone-card);
+  border: 1px solid var(--phone-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 24px;
+}
+.p-card.severe { border-left-color: var(--severe); }
+.p-card.healthy { border-left-color: var(--healthy); }
+.p-htitle {
+  font-size: 18px;
+  font-weight: 500;
+  color: #f5f5f5;
+  line-height: 1.3;
+  margin-bottom: 8px;
+}
+.p-hsub {
+  font-size: 14px;
+  color: var(--phone-text-mute);
+  line-height: 1.55;
+  margin-bottom: 20px;
+}
+.p-meta-line {
+  font-size: 13px;
+  color: var(--phone-text-mute);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.p-meta-line b { color: #d8d8d8; font-weight: 500; }
+.p-cta {
+  background: var(--accent);
+  color: var(--accent-deep);
+  padding: 13px 16px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border: none;
+  width: 100%;
+  transition: filter 0.15s;
+}
+.p-cta:hover { filter: brightness(1.05); }
+.p-cta.severe { background: var(--severe); color: #fff; }
+.p-cta.ghost {
+  background: transparent;
+  color: #d8d8d8;
+  border: 1px solid var(--phone-line-bright);
+  margin-top: 10px;
+}
+.p-cta.ghost:hover { background: rgba(255,255,255,0.04); }
+.p-cta.small {
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.p-also-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-mute);
+  letter-spacing: 0.14em;
+  margin-bottom: 12px;
+  margin-top: 8px;
+}
+.p-alsorow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 14px;
+  color: #c8c8c8;
+  line-height: 1.5;
+}
+.p-dash {
+  color: var(--phone-text-faint);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.p-tabs {
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 20px 18px;
+  border-top: 1px solid var(--phone-line);
+  background: var(--phone-bg);
+  flex-shrink: 0;
+}
+.p-tab {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-faint);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 4px 18px;
+}
+.p-tab.on { color: var(--accent); }
+.p-tab svg { width: 20px; height: 20px; }
+
+/* HEALTHY screen */
+.healthy-big {
+  background: var(--phone-card);
+  border: 1px solid var(--phone-line);
+  border-left: 3px solid var(--healthy);
+  border-radius: 14px;
+  padding: 24px 22px;
+  margin-bottom: 24px;
+}
+.healthy-mark {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: rgba(74,222,128,0.12);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 14px;
+}
+.healthy-mark svg { width: 22px; height: 22px; }
+.healthy-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--phone-line);
+  font-size: 13px;
+}
+.healthy-stat:last-child { border-bottom: none; }
+.healthy-statk { color: var(--phone-text-mute); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; }
+.healthy-statv { color: var(--phone-text); font-weight: 500; }
+
+/* ISSUE PAGE — evidence toggle */
+.evidence-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 14px 0;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--phone-line);
+  color: var(--phone-text-mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+.evidence-toggle:hover { color: var(--phone-text); }
+.evidence-toggle .chev {
+  transition: transform 0.2s;
+  font-size: 10px;
+}
+.evidence-toggle.open .chev { transform: rotate(180deg); }
+.evidence-body {
+  display: none;
+  padding: 0 0 8px;
+  animation: fadeIn 0.3s ease;
+}
+.evidence-toggle.open + .evidence-body { display: block; }
+.ev-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--phone-line);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.ev-row:last-child { border-bottom: none; }
+.ev-k { color: var(--phone-text-mute); letter-spacing: 0.04em; }
+.ev-v { color: var(--phone-text); font-weight: 500; }
+.ev-v.warn { color: var(--accent); }
+.ev-section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--phone-text-faint);
+  text-transform: uppercase;
+  margin: 16px 0 8px;
+}
+.ev-dtc {
+  background: rgba(245,197,24,0.06);
+  border: 1px solid rgba(245,197,24,0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+.ev-dtc-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 3px;
+  letter-spacing: 0.04em;
+}
+.ev-dtc-desc {
+  font-size: 12px;
+  color: var(--phone-text-mute);
+  line-height: 1.5;
+}
+
+/* PRE-FLIGHT */
+.preflight-list {
+  background: var(--phone-card);
+  border: 1px solid var(--phone-line);
+  border-radius: 14px;
+  padding: 4px 18px;
+  margin-bottom: 24px;
+}
+.preflight-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--phone-line);
+}
+.preflight-row:last-child { border-bottom: none; }
+.preflight-box {
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--phone-text-faint);
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.preflight-box.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  position: relative;
+}
+.preflight-box.checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--accent-deep);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.preflight-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--phone-text);
+  line-height: 1.5;
+}
+.preflight-sub {
+  font-size: 12px;
+  color: var(--phone-text-mute);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+
+/* WALKTHROUGH */
+.step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245,197,24,0.1);
+  color: var(--accent);
+  padding: 5px 10px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  margin-bottom: 14px;
+}
+.step-progress {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+.step-progress span {
+  flex: 1;
+  height: 3px;
+  background: var(--phone-line);
+  border-radius: 2px;
+  transition: background 0.3s;
+}
+.step-progress span.done { background: var(--accent); }
+.step-progress span.current { background: var(--accent); }
+
+.diagram-card {
+  background: var(--phone-card);
+  border: 1px solid var(--phone-line);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.diagram-svg-wrap {
+  background: #050505;
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 12px;
+}
+.diagram-svg { width: 100%; height: auto; display: block; }
+.diagram-caption {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-mute);
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+
+.step-body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--phone-text);
+  margin-bottom: 22px;
+}
+.step-body .y { color: var(--accent); font-weight: 500; }
+
+/* SEVERE STEPS (inline list on Severe Issue page) */
+.severe-steps-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-mute);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  margin-top: 4px;
+}
+.severe-steps {
+  margin-bottom: 24px;
+}
+.severe-step {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--phone-line);
+}
+.severe-step:last-child { border-bottom: none; }
+.severe-step-num {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(228,69,69,0.15);
+  color: #ff9090;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.02em;
+}
+.severe-step-body {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--phone-text);
+}
+.severe-step-body strong {
+  font-weight: 500;
+  color: #ffb8b8;
+}
+.ev-v.severe-warn { color: #ff9090; }
+.ev-dtc.severe {
+  background: rgba(228,69,69,0.06);
+  border: 1px solid rgba(228,69,69,0.18);
+}
+.ev-dtc.severe .ev-dtc-code { color: #ff9090; }
+
+/* MECHANIC DRAFT */
+.draft-card {
+  background: var(--phone-card);
+  border: 1px solid var(--phone-line);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.draft-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--phone-line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-mute);
+  letter-spacing: 0.06em;
+}
+.draft-meta .dot {
+  width: 4px; height: 4px; background: var(--accent); border-radius: 50%;
+}
+.draft-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--phone-text);
+  white-space: pre-wrap;
+}
+
+/* HISTORY */
+.history-stat-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.history-stat {
+  flex: 1;
+  background: var(--phone-card);
+  border: 1px solid var(--phone-line);
+  border-radius: 12px;
+  padding: 14px;
+}
+.history-stat-num {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--phone-text);
+  font-family: var(--font-mono);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.history-stat-num.accent { color: var(--accent); }
+.history-stat-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--phone-text-mute);
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+}
+
+.history-month {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--phone-text-faint);
+  text-transform: uppercase;
+  margin: 18px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--phone-line);
+}
+.history-month:first-of-type { margin-top: 8px; }
+
+.history-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--phone-line);
+}
+.history-row:last-child { border-bottom: none; }
+.history-date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--phone-text-faint);
+  letter-spacing: 0.04em;
+  min-width: 36px;
+  padding-top: 2px;
+}
+.history-body { flex: 1; min-width: 0; }
+.history-title {
+  font-size: 14px;
+  color: var(--phone-text);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.history-pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+.history-pill.open { background: rgba(245,197,24,0.13); color: var(--accent); }
+.history-pill.resolved { background: rgba(74,222,128,0.1); color: var(--healthy); }
+.history-pill.recurrence { background: rgba(228,69,69,0.13); color: #ff9090; }
+.history-sub {
+  font-size: 12px;
+  color: var(--phone-text-mute);
+  line-height: 1.5;
+}
+
+.note {
+  margin-top: 32px;
+  max-width: 380px;
+  font-size: 13px;
+  color: var(--ink-mute);
+  line-height: 1.65;
+  text-align: center;
+  padding: 0 8px;
+}
+.note b { color: var(--ink); font-weight: 500; }
+.note .lab {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: block;
+}
+
+@media (max-width: 920px) {
+  .stage { grid-template-columns: 1fr; gap: 28px; }
+  .picker { position: static; }
+  .phone-shell { transform: scale(0.92); transform-origin: top center; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="brand">CAR<span class="bd"></span>COPILOT</div>
+    <div class="brand-sub">multi-screen prototype · v0.9 · polymorphic</div>
+  </div>
+  <div class="topmeta">
+    <div>Gemma 4 hackathon · Gemma·Gang</div>
+    <div><b>9 screens</b> · diy + severe flows · history</div>
+  </div>
+</div>
+
+<div class="stage">
+
+  <aside class="picker">
+
+    <div class="conn-toggle">
+      <div class="conn-toggle-label">Demo state</div>
+      <div class="conn-toggle-row">
+        <button class="conn-btn active" id="btn-online">online</button>
+        <button class="conn-btn offline" id="btn-offline">offline</button>
+      </div>
+    </div>
+
+    <div class="picker-group">
+      <div class="picker-label">Home states</div>
+      <button class="picker-item active" data-screen="home-multi">
+        <div class="picker-row"><span class="picker-num">01</span><span class="picker-name">Today's drive — 3 issues</span></div>
+        <div class="picker-hint">Tap the card to enter the issue page</div>
+      </button>
+      <button class="picker-item" data-screen="home-healthy">
+        <div class="picker-row"><span class="picker-num">02</span><span class="picker-name">Today's drive — healthy</span></div>
+        <div class="picker-hint">When there's nothing to worry about</div>
+      </button>
+      <button class="picker-item" data-screen="home-severe">
+        <div class="picker-row"><span class="picker-num">03</span><span class="picker-name">Today's drive — pull over</span></div>
+        <div class="picker-hint">Urgent triage, severe condition</div>
+      </button>
+    </div>
+
+    <div class="picker-group">
+      <div class="picker-label">DIY flow</div>
+      <button class="picker-item" data-screen="issue">
+        <div class="picker-row"><span class="picker-num">04</span><span class="picker-name">Issue page · DIY</span></div>
+        <div class="picker-hint">Cheap, low-risk — walkthrough is primary</div>
+      </button>
+      <button class="picker-item" data-screen="preflight">
+        <div class="picker-row"><span class="picker-num">05</span><span class="picker-name">Pre-flight</span></div>
+        <div class="picker-hint">Tools, parts, conditions before opening the hood</div>
+      </button>
+      <button class="picker-item" data-screen="walkthrough">
+        <div class="picker-row"><span class="picker-num">06</span><span class="picker-name">Walkthrough</span></div>
+        <div class="picker-hint">Step-by-step with engine bay diagram</div>
+      </button>
+    </div>
+
+    <div class="picker-group">
+      <div class="picker-label">Severe flow</div>
+      <button class="picker-item" data-screen="severe-issue">
+        <div class="picker-row"><span class="picker-num">07</span><span class="picker-name">Issue page · Severe</span></div>
+        <div class="picker-hint">Same schema, different render — safety inline</div>
+      </button>
+    </div>
+
+    <div class="picker-group">
+      <div class="picker-label">Mechanic flow</div>
+      <button class="picker-item" data-screen="draft">
+        <div class="picker-row"><span class="picker-num">08</span><span class="picker-name">Drafted message</span></div>
+        <div class="picker-hint">Gemma drafts a text to send to a shop</div>
+      </button>
+    </div>
+
+    <div class="picker-group">
+      <div class="picker-label">System</div>
+      <button class="picker-item" data-screen="history">
+        <div class="picker-row"><span class="picker-num">09</span><span class="picker-name">History — patterns</span></div>
+        <div class="picker-hint">Recurrence detection across past issues</div>
+      </button>
+    </div>
+
+  </aside>
+
+  <div class="phone-area">
+    <div class="phone-shell">
+      <div class="phone">
+
+        <div class="statusbar"><span>9:41</span><span>5G 100%</span></div>
+
+        <!-- 01 HOME MULTI -->
+        <div class="screen" data-screen="home-multi">
+          <div class="p-top">
+            <div class="p-top-left">
+              <div>
+                <div class="p-mark">CAR<span class="p-mdot"></span>COPILOT</div>
+                <div class="p-veh">2009 Corolla</div>
+              </div>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai" data-thinks="true">
+              <div class="p-ailabel">Today's drive</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext">Six little findings today — but only <span class="y">one real problem</span>. You're safe to drive this week.</div>
+            </div>
+
+            <div class="p-card" data-nav="issue" style="cursor:pointer;">
+              <div class="p-htitle">Two cylinders aren't firing right</div>
+              <div class="p-hsub">Likely one ignition coil — common on Corollas this old.</div>
+              <div class="p-meta-line">Safe for short trips · <b>$45</b> · <b>30 min</b> · DIY-friendly</div>
+              <div class="p-cta">Show me what's going on →</div>
+            </div>
+
+            <div class="p-also-label">Also</div>
+            <div class="p-alsorow"><div class="p-dash">—</div><div>Tighten gas cap next time you stop</div></div>
+            <div class="p-alsorow"><div class="p-dash">—</div><div>Front-left tire low at 22 PSI</div></div>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 02 HOME HEALTHY -->
+        <div class="screen" data-screen="home-healthy" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <div>
+                <div class="p-mark">CAR<span class="p-mdot"></span>COPILOT</div>
+                <div class="p-veh">2009 Corolla</div>
+              </div>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai healthy" data-thinks="true">
+              <div class="p-ailabel">Today's drive</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext"><span class="g">You're good.</span> Eighteen miles, no issues. Coolant, fuel, ignition — all reading normal.</div>
+            </div>
+
+            <div class="healthy-big">
+              <div class="healthy-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="p-htitle" style="margin-bottom:6px;">All systems healthy</div>
+              <div class="p-hsub" style="margin-bottom:20px;">Your car checked out clean across today's drive. Last full scan two minutes ago.</div>
+
+              <div class="healthy-stat"><div class="healthy-statk">TRIP</div><div class="healthy-statv">18.4 mi · 42 min</div></div>
+              <div class="healthy-stat"><div class="healthy-statk">FUEL ECONOMY</div><div class="healthy-statv">31.8 mpg</div></div>
+              <div class="healthy-stat"><div class="healthy-statk">COOLANT</div><div class="healthy-statv">89°C — normal</div></div>
+              <div class="healthy-stat"><div class="healthy-statk">BATTERY (CRANK)</div><div class="healthy-statv">12.4 V — normal</div></div>
+            </div>
+
+            <div style="text-align:center; font-family:var(--font-mono); font-size:11px; color:var(--phone-text-faint); letter-spacing:0.08em;">142 healthy scans this year</div>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 03 HOME SEVERE -->
+        <div class="screen" data-screen="home-severe" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <div>
+                <div class="p-mark">CAR<span class="p-mdot"></span>COPILOT</div>
+                <div class="p-veh">2009 Corolla</div>
+              </div>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai severe" data-thinks="true">
+              <div class="p-ailabel">Pull over now</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext">Your engine is <span class="r">overheating</span>. Stop driving as soon as it's safe — within 5 miles. Continuing could crack the engine block.</div>
+            </div>
+
+            <div class="p-card severe" data-nav="severe-issue" style="cursor:pointer;">
+              <div class="p-htitle">Engine running too hot</div>
+              <div class="p-hsub">Coolant is at 110°C — should be 85-95°C. The radiator isn't keeping up, or you're low on coolant.</div>
+              <div class="p-meta-line"><b style="color:#ffb8b8;">Do not keep driving</b> · <b>$25</b> coolant · safe to do once cool</div>
+              <div class="p-cta severe">Stop engine · walk me through it →</div>
+            </div>
+
+            <div class="p-also-label">Also detected — fix after this</div>
+            <div class="p-alsorow"><div class="p-dash">—</div><div>Cylinder misfire (P0301) — handle once the overheat is resolved</div></div>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 04 ISSUE PAGE -->
+        <div class="screen" data-screen="issue" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <button class="p-back" data-nav="home-multi">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Today
+              </button>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai" data-thinks="true">
+              <div class="p-ailabel">Here's what I'm seeing</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext">Cylinder 1 keeps misfiring — your O2 sensor is reading rich and idle is rough. On Corollas this age, that pattern almost always means a worn <span class="y">ignition coil</span>. Each cylinder has its own little coil pack, and when one starts going, you get exactly this combo.</div>
+              <div class="p-aitext">The good news: it's a 30-minute fix with one $45 part. I can walk you through it.</div>
+            </div>
+
+            <div class="p-card">
+              <div class="p-htitle">Replace ignition coil — cylinder 1</div>
+              <div class="p-hsub">A small black block on top of the engine. You don't need a lift. Just a 10mm socket.</div>
+              <div class="p-meta-line"><b>$45</b> part · <b>30 min</b> · <b>easy</b> · safe for short trips meanwhile</div>
+              <button class="p-cta" data-nav="preflight">Walk me through the fix →</button>
+              <button class="p-cta ghost" data-nav="draft">Send this to a mechanic instead</button>
+            </div>
+
+            <button class="evidence-toggle" id="evidence-btn">
+              <span>Show raw data for a mechanic</span>
+              <span class="chev">▼</span>
+            </button>
+            <div class="evidence-body">
+              <div class="ev-section-label">Trouble codes</div>
+              <div class="ev-dtc">
+                <div class="ev-dtc-code">P0301</div>
+                <div class="ev-dtc-desc">Cylinder 1 misfire detected — first seen 4 drives ago, confirmed today.</div>
+              </div>
+
+              <div class="ev-section-label">Live readings</div>
+              <div class="ev-row"><div class="ev-k">RPM (idle)</div><div class="ev-v warn">740 — rough</div></div>
+              <div class="ev-row"><div class="ev-k">O2 sensor (bank 1)</div><div class="ev-v warn">0.92 V — rich</div></div>
+              <div class="ev-row"><div class="ev-k">Short-term fuel trim</div><div class="ev-v warn">+14% — compensating</div></div>
+              <div class="ev-row"><div class="ev-k">Coolant temp</div><div class="ev-v">88°C — normal</div></div>
+              <div class="ev-row"><div class="ev-k">Misfire counter (cyl 1)</div><div class="ev-v warn">23 in last drive</div></div>
+            </div>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on" data-nav="home-multi">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 05 PRE-FLIGHT -->
+        <div class="screen" data-screen="preflight" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <button class="p-back" data-nav="issue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Back
+              </button>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai" data-thinks="true">
+              <div class="p-ailabel">Before you start</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext">About 30 minutes from here. Engine has to be fully cool — if you just drove, give it 20 minutes first. Park on level ground.</div>
+            </div>
+
+            <div style="font-family:var(--font-mono); font-size:11px; color:var(--phone-text-mute); letter-spacing:0.14em; text-transform:uppercase; margin-bottom:10px;">You'll need</div>
+
+            <div class="preflight-list">
+              <div class="preflight-row">
+                <div class="preflight-box checked"></div>
+                <div>
+                  <div class="preflight-text">A 10mm socket and ratchet</div>
+                  <div class="preflight-sub">Standard size — most basic socket sets have it.</div>
+                </div>
+              </div>
+              <div class="preflight-row">
+                <div class="preflight-box"></div>
+                <div>
+                  <div class="preflight-text">One new ignition coil — about $40-50</div>
+                  <div class="preflight-sub">Any auto parts store. Ask for "ignition coil, 2009 Corolla 1.8L." Buy one — the others are still fine.</div>
+                </div>
+              </div>
+              <div class="preflight-row">
+                <div class="preflight-box"></div>
+                <div>
+                  <div class="preflight-text">A clean rag or paper towel</div>
+                  <div class="preflight-sub">For wiping the area around the spark plug.</div>
+                </div>
+              </div>
+              <div class="preflight-row">
+                <div class="preflight-box checked"></div>
+                <div>
+                  <div class="preflight-text">A cool engine + good light</div>
+                  <div class="preflight-sub">Daytime or a garage light works fine.</div>
+                </div>
+              </div>
+            </div>
+
+            <button class="p-cta" data-nav="walkthrough">I'm ready — start the walkthrough →</button>
+            <button class="p-cta ghost" data-nav="issue">Not now, go back</button>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on" data-nav="home-multi">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 06 WALKTHROUGH (multi-step in-place) -->
+        <div class="screen" data-screen="walkthrough" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <button class="p-back" data-nav="preflight">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Back
+              </button>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="step-pill">
+              STEP <span id="step-num">1</span> / 4
+            </div>
+            <div class="step-progress" id="step-progress">
+              <span class="current"></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+
+            <div class="p-ai" data-thinks="true">
+              <div class="p-ailabel" id="step-label">Find the coils</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext" id="step-body">Pop the hood. You're looking for four small black rectangular blocks sitting on top of the engine, in a row. Each one has a single wire connector running to it. Those are the <span class="y">ignition coils</span>. Cylinder 1 is closest to the timing belt side — that's the side facing the front of the car.</div>
+            </div>
+
+            <div class="diagram-card">
+              <div class="diagram-svg-wrap">
+                <svg class="diagram-svg" id="diagram-svg" viewBox="0 0 280 180" xmlns="http://www.w3.org/2000/svg">
+                  <!-- engine block silhouette -->
+                  <rect x="30" y="55" width="220" height="95" rx="6" fill="none" stroke="#3a3a37" stroke-width="1.5"/>
+                  <!-- valve cover -->
+                  <rect x="42" y="70" width="196" height="40" rx="3" fill="#1a1a18" stroke="#4a4a47" stroke-width="1"/>
+                  <!-- coils -->
+                  <g id="coil-1">
+                    <rect x="56" y="40" width="32" height="38" rx="3" fill="#f5c518" stroke="#f5c518" stroke-width="1.5"/>
+                    <line x1="72" y1="33" x2="72" y2="40" stroke="#f5c518" stroke-width="1.5"/>
+                    <circle cx="72" cy="32" r="3" fill="#f5c518"/>
+                  </g>
+                  <g>
+                    <rect x="100" y="40" width="32" height="38" rx="3" fill="none" stroke="#4a4a47" stroke-width="1.5"/>
+                    <line x1="116" y1="33" x2="116" y2="40" stroke="#4a4a47" stroke-width="1.5"/>
+                    <circle cx="116" cy="32" r="3" fill="none" stroke="#4a4a47" stroke-width="1"/>
+                  </g>
+                  <g>
+                    <rect x="144" y="40" width="32" height="38" rx="3" fill="none" stroke="#4a4a47" stroke-width="1.5"/>
+                    <line x1="160" y1="33" x2="160" y2="40" stroke="#4a4a47" stroke-width="1.5"/>
+                    <circle cx="160" cy="32" r="3" fill="none" stroke="#4a4a47" stroke-width="1"/>
+                  </g>
+                  <g>
+                    <rect x="188" y="40" width="32" height="38" rx="3" fill="none" stroke="#4a4a47" stroke-width="1.5"/>
+                    <line x1="204" y1="33" x2="204" y2="40" stroke="#4a4a47" stroke-width="1.5"/>
+                    <circle cx="204" cy="32" r="3" fill="none" stroke="#4a4a47" stroke-width="1"/>
+                  </g>
+
+                  <!-- hoses on the side -->
+                  <path d="M 30 90 Q 18 90 18 110 L 18 145" fill="none" stroke="#3a3a37" stroke-width="1.5"/>
+                  <path d="M 250 100 Q 262 100 262 120 L 262 145" fill="none" stroke="#3a3a37" stroke-width="1.5"/>
+
+                  <!-- arrow + label for coil 1 -->
+                  <line x1="72" y1="15" x2="72" y2="32" stroke="#f5c518" stroke-width="1.5"/>
+                  <polygon points="68,28 72,36 76,28" fill="#f5c518"/>
+                  <text x="72" y="11" font-family="JetBrains Mono, monospace" font-size="9" fill="#f5c518" text-anchor="middle" letter-spacing="0.5">COIL 1 — REPLACE THIS</text>
+
+                  <!-- front of car label -->
+                  <text x="72" y="170" font-family="JetBrains Mono, monospace" font-size="8" fill="#5a5a55" text-anchor="middle" letter-spacing="1">← FRONT</text>
+                  <text x="208" y="170" font-family="JetBrains Mono, monospace" font-size="8" fill="#5a5a55" text-anchor="middle" letter-spacing="1">CABIN →</text>
+                </svg>
+              </div>
+              <div class="diagram-caption" id="diagram-caption">Engine bay — cylinder 1 highlighted</div>
+            </div>
+
+            <button class="p-cta" id="step-next">Done — next step →</button>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on" data-nav="home-multi">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 07 SEVERE ISSUE PAGE -->
+        <div class="screen" data-screen="severe-issue" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <button class="p-back" data-nav="home-severe">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Back
+              </button>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai severe" data-thinks="true">
+              <div class="p-ailabel">Here's what's happening</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext">Your coolant is at <span class="r">110°C</span> and climbing — should sit between 85 and 95. Either the radiator can't keep up or you're low on coolant. Either way, you need to stop within the next few minutes.</div>
+              <div class="p-aitext">Follow these in order. The misfire from earlier can wait — we'll handle it once the engine is cool.</div>
+            </div>
+
+            <div class="p-card severe">
+              <div class="p-htitle">Engine running too hot</div>
+              <div class="p-hsub">Coolant at 110°C · should be 85-95°C. Driving more than another 5 miles could crack the engine block.</div>
+              <div class="p-meta-line"><b style="color:#ffb8b8;">Stop within 5 miles</b> · shoulder, lot, or side street is fine</div>
+            </div>
+
+            <div class="severe-steps-label">What to do — in order</div>
+            <div class="severe-steps">
+              <div class="severe-step">
+                <div class="severe-step-num">1</div>
+                <div class="severe-step-body">Put your <strong>hazards on</strong> and find a place to stop. Don't worry about the perfect spot — a shoulder, parking lot, or side street is fine.</div>
+              </div>
+              <div class="severe-step">
+                <div class="severe-step-num">2</div>
+                <div class="severe-step-body">Turn <strong>heat to max</strong> and the fan to high. I know it's weird — heat pulls warmth out of the engine and into the cabin. Buys you a couple miles.</div>
+              </div>
+              <div class="severe-step">
+                <div class="severe-step-num">3</div>
+                <div class="severe-step-body">Once stopped: engine off, hood up. <strong>Don't touch the radiator cap</strong> — it's pressurized and will scald you. Wait 30 minutes before doing anything else, then I'll check the readings.</div>
+              </div>
+            </div>
+
+            <button class="evidence-toggle">
+              <span>Show raw data for a mechanic</span>
+              <span class="chev">▼</span>
+            </button>
+            <div class="evidence-body">
+              <div class="ev-section-label">Live readings</div>
+              <div class="ev-row"><div class="ev-k">Coolant temp</div><div class="ev-v severe-warn">110°C — overheating</div></div>
+              <div class="ev-row"><div class="ev-k">Coolant pressure</div><div class="ev-v severe-warn">low</div></div>
+              <div class="ev-row"><div class="ev-k">Fan duty cycle</div><div class="ev-v">100% — maxed</div></div>
+              <div class="ev-row"><div class="ev-k">Ambient temp</div><div class="ev-v">28°C</div></div>
+
+              <div class="ev-section-label">Trouble codes</div>
+              <div class="ev-dtc severe">
+                <div class="ev-dtc-code">P0217</div>
+                <div class="ev-dtc-desc">Engine over-temperature condition — confirmed.</div>
+              </div>
+              <div class="ev-dtc">
+                <div class="ev-dtc-code">P0301</div>
+                <div class="ev-dtc-desc">Cylinder 1 misfire — secondary, deferred until engine cools.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on" data-nav="home-multi">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 08 MECHANIC DRAFT -->
+        <div class="screen" data-screen="draft" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <button class="p-back" data-nav="issue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Back
+              </button>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai" data-thinks="true">
+              <div class="p-ailabel">Drafted for you</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">drafting on-device…</div></div>
+              <div class="p-aitext">Here's a message you can send to a shop. They'll know exactly what to look at — most won't charge a diagnostic fee if you come in with this.</div>
+            </div>
+
+            <div class="draft-card">
+              <div class="draft-meta">
+                <span class="dot"></span>
+                <span>FROM CAR<span class="p-mdot" style="background:var(--phone-text-mute);"></span>COPILOT</span>
+                <span style="margin-left:auto;">EDITABLE</span>
+              </div>
+              <div class="draft-text">Hi — my 2009 Corolla (187k miles) has been showing a P0301 misfire on cylinder 1 for the last few drives. O2 sensor is reading rich and idle is rough.
+
+Looks like it might be an ignition coil but I wanted a pro to confirm before I buy parts. Could you give me a rough estimate?
+
+I'm trying to keep costs down — happy to bring it in when you have time.</div>
+            </div>
+
+            <button class="p-cta">Looks good — open Messages →</button>
+            <button class="p-cta ghost">Edit before sending</button>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab on" data-nav="home-multi">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab" data-nav="history">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+        <!-- 09 HISTORY -->
+        <div class="screen" data-screen="history" hidden>
+          <div class="p-top">
+            <div class="p-top-left">
+              <div>
+                <div class="p-mark">CAR<span class="p-mdot"></span>COPILOT</div>
+                <div class="p-veh">History · 2009 Corolla</div>
+              </div>
+            </div>
+            <div class="offline-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              OFFLINE
+            </div>
+          </div>
+
+          <div class="screen-content">
+            <div class="p-ai" data-thinks="true">
+              <div class="p-ailabel">Pattern I've noticed</div>
+              <div class="p-think"><div class="dots"><span></span><span></span><span></span></div><div class="p-think-label">thinking on-device…</div></div>
+              <div class="p-aitext">You've replaced an ignition coil before — back in October. Two coils in seven months is faster than normal on a Corolla. Usually means <span class="y">oil is leaking past the valve cover gasket</span> and fouling them. Worth mentioning to a mechanic at your next service.</div>
+            </div>
+
+            <div class="history-stat-row">
+              <div class="history-stat">
+                <div class="history-stat-num">12</div>
+                <div class="history-stat-label">ISSUES<br/>RESOLVED</div>
+              </div>
+              <div class="history-stat">
+                <div class="history-stat-num accent">2</div>
+                <div class="history-stat-label">COIL<br/>FAILURES</div>
+              </div>
+              <div class="history-stat">
+                <div class="history-stat-num">$284</div>
+                <div class="history-stat-label">SPENT<br/>THIS YEAR</div>
+              </div>
+            </div>
+
+            <div class="history-month">May 2026</div>
+            <div class="history-row">
+              <div class="history-date">14</div>
+              <div class="history-body">
+                <div class="history-title">Cylinder 1 misfire <span class="history-pill open">in progress</span> <span class="history-pill recurrence">recurrence</span></div>
+                <div class="history-sub">P0301 · likely ignition coil · same pattern as October's coil failure</div>
+              </div>
+            </div>
+
+            <div class="history-month">March 2026</div>
+            <div class="history-row">
+              <div class="history-date">22</div>
+              <div class="history-body">
+                <div class="history-title">Gas cap loose <span class="history-pill resolved">resolved</span></div>
+                <div class="history-sub">P0457 · you tightened it · cleared after 2 drives</div>
+              </div>
+            </div>
+
+            <div class="history-month">February 2026</div>
+            <div class="history-row">
+              <div class="history-date">08</div>
+              <div class="history-body">
+                <div class="history-title">Front-left tire low <span class="history-pill resolved">resolved</span></div>
+                <div class="history-sub">22 PSI → 35 PSI · filled at gas station</div>
+              </div>
+            </div>
+
+            <div class="history-month">December 2025</div>
+            <div class="history-row">
+              <div class="history-date">04</div>
+              <div class="history-body">
+                <div class="history-title">Battery weak at start <span class="history-pill resolved">resolved</span></div>
+                <div class="history-sub">11.8 V at crank · new battery from shop · $140</div>
+              </div>
+            </div>
+
+            <div class="history-month">October 2025</div>
+            <div class="history-row">
+              <div class="history-date">17</div>
+              <div class="history-body">
+                <div class="history-title">Cylinder 3 misfire <span class="history-pill resolved">resolved</span></div>
+                <div class="history-sub">P0303 · ignition coil replaced · $45 · same symptoms as today</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-tabs">
+            <button class="p-tab" data-nav="home-multi">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/></svg>
+              Home
+            </button>
+            <button class="p-tab on">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              History
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="note" id="note">
+      <div class="lab">What's notable here</div>
+      <div id="note-text"><b>Thinking state on first open.</b> Switch screens or hit the picker again — the AI strip shows the typing indicator for about a second before the sentence resolves. Tap the issue card to enter the issue page.</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const NOTES = {
+  "home-multi": "<b>Tap the issue card.</b> The card on home is the affordance into the issue page — no separate \"Issues\" tab. Two tabs at the bottom: Home and History.",
+  "home-healthy": "<b>The same thinking pattern, calmer outcome.</b> Even when the answer is \"you're good,\" the model still runs — and showing the typing pulse makes that visible.",
+  "home-severe": "<b>Severity rewrites the screen — and is tappable.</b> Tap the severe card to see the polymorphic Issue page variant. Typing animation tints red, CTA is a verb (\"stop engine\"), misfire demotes to one line.",
+  "issue": "<b>The Gemma demo lives here.</b> Long-form reasoning at the top — not just \"misfire detected\" but the model connecting three signals into a diagnosis, in Maria-language. Primary CTA leans DIY because Gemma classified this as DIY-eligible. Raw codes hidden behind a toggle, framed as the user's artifact for a pro.",
+  "preflight": "<b>Honesty about prerequisites.</b> Before the walkthrough, Gemma surfaces what you'd need and whether you'd actually have it. The pre-checked items are inferred from the dongle (engine temp, light) or the model's defaults; the unchecked ones the user needs to confirm.",
+  "walkthrough": "<b>This is the load-bearing Gemma moment.</b> Each step's text is generated on-device for this specific car, this specific fault, this specific tool list. The diagram is static SVG — but the words around it are the model. Tap \"Done — next step\" to advance.",
+  "severe-issue": "<b>Same Issue schema, different render.</b> Gemma classified this as <i>severe / safety</i> rather than DIY-eligible, so the page reorganizes: no \"walk me to a separate screen\" intermediate — safety steps inline, right now, in order. Evidence shows the overheat code prioritized over the misfire, which Gemma has explicitly deferred. This is what \"polymorphic UI based on agent classification\" means in practice.",
+  "draft": "<b>The mechanic-handoff artifact.</b> Drafted by Gemma using the same evidence the issue page surfaces, but rewritten in the user's voice for a text message — including the cost-conscious framing. This is what the product prepares even when Maria chooses not to DIY.",
+  "history": "<b>Recurrence is the differentiator.</b> A $20 scanner shows you today's codes. Gemma sees that today's misfire matches October's, and proposes a root cause (valve cover oil leak) that explains both. This pattern reasoning is the thing that makes the product more than a code reader."
+};
+
+let isOffline = false;
+let currentStep = 1;
+
+const STEPS = [
+  {
+    label: "Find the coils",
+    body: "Pop the hood. You're looking for four small black rectangular blocks sitting on top of the engine, in a row. Each one has a single wire connector running to it. Those are the <span class=\"y\">ignition coils</span>. Cylinder 1 is closest to the timing belt side — that's the side facing the front of the car.",
+    caption: "Engine bay — cylinder 1 highlighted"
+  },
+  {
+    label: "Disconnect coil 1",
+    body: "Squeeze the little plastic tab on the wire connector and pull straight up — it'll release with a soft click. Then take your <span class=\"y\">10mm socket</span> and remove the single bolt holding the coil down. Set the bolt somewhere you won't lose it (your pocket works).",
+    caption: "Connector + bolt — both on top of the coil"
+  },
+  {
+    label: "Lift out the old coil",
+    body: "Grab the coil at its base and pull straight up. It's seated onto the spark plug below — give it a wiggle if it's stubborn, but pull straight, not sideways. It should come out with maybe 8 inches of a thin black rubber boot attached. That's normal.",
+    caption: "Pull straight up — don't twist"
+  },
+  {
+    label: "Drop in the new one",
+    body: "Take the new coil out of the box. Push it straight down into the same hole until you feel it seat onto the spark plug. Bolt it back down (don't crank too hard — snug is fine). Reconnect the wire until you hear the click. Close the hood. Start the engine. The misfire should clear in a minute or two — I'll let you know."
+  ,
+    caption: "Snug, not tight — and listen for the click"
+  }
+];
+
+function updateStep() {
+  const labelEl = document.getElementById('step-label');
+  const bodyEl = document.getElementById('step-body');
+  const numEl = document.getElementById('step-num');
+  const capEl = document.getElementById('diagram-caption');
+  const progressEl = document.getElementById('step-progress');
+  const nextBtn = document.getElementById('step-next');
+  if (!labelEl) return;
+
+  const step = STEPS[currentStep - 1];
+  labelEl.textContent = step.label;
+  bodyEl.innerHTML = step.body;
+  numEl.textContent = currentStep;
+  capEl.textContent = step.caption;
+
+  // progress dots
+  const dots = progressEl.querySelectorAll('span');
+  dots.forEach((d, i) => {
+    d.classList.remove('done', 'current');
+    if (i < currentStep - 1) d.classList.add('done');
+    else if (i === currentStep - 1) d.classList.add('current');
+  });
+
+  // retrigger thinking on step change
+  const aiBlock = bodyEl.closest('.p-ai');
+  if (aiBlock) {
+    aiBlock.classList.add('thinking');
+    setTimeout(() => aiBlock.classList.remove('thinking'), 900 + Math.random() * 300);
+  }
+
+  // button label on last step
+  if (currentStep >= STEPS.length) {
+    nextBtn.textContent = "All done — back to home";
+  } else {
+    nextBtn.textContent = "Done — next step →";
+  }
+}
+
+function handleStepNext() {
+  if (currentStep >= STEPS.length) {
+    currentStep = 1;
+    showScreen('home-multi');
+    updateStep();
+    return;
+  }
+  currentStep++;
+  updateStep();
+}
+
+function showScreen(target) {
+  document.querySelectorAll('.picker-item').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.querySelector(`.picker-item[data-screen="${target}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  document.querySelectorAll('.screen').forEach(s => {
+    s.hidden = s.dataset.screen !== target;
+  });
+
+  const screen = document.querySelector(`.screen[data-screen="${target}"]`);
+  if (screen) {
+    const aiBlocks = screen.querySelectorAll('.p-ai[data-thinks]');
+    aiBlocks.forEach(aiBlock => {
+      aiBlock.classList.add('thinking');
+      setTimeout(() => aiBlock.classList.remove('thinking'), 1100 + Math.random() * 400);
+    });
+
+    const content = screen.querySelector('.screen-content');
+    if (content) content.scrollTop = 0;
+  }
+
+  // reset walkthrough step when entering walkthrough
+  if (target === 'walkthrough') {
+    currentStep = 1;
+    setTimeout(updateStep, 50);
+  }
+
+  // reset evidence toggles when leaving issue pages
+  if (target !== 'issue' && target !== 'severe-issue') {
+    document.querySelectorAll('.evidence-toggle').forEach(ev => ev.classList.remove('open'));
+  }
+
+  const noteEl = document.getElementById('note-text');
+  if (noteEl) noteEl.innerHTML = NOTES[target] || '';
+}
+
+document.querySelectorAll('.picker-item').forEach(btn => {
+  btn.addEventListener('click', () => showScreen(btn.dataset.screen));
+});
+
+// in-phone navigation (data-nav on cards, tabs, back buttons)
+document.querySelectorAll('[data-nav]').forEach(el => {
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showScreen(el.dataset.nav);
+  });
+});
+
+// evidence toggles (class-based to support multiple instances across Issue variants)
+document.querySelectorAll('.evidence-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('open');
+  });
+});
+
+// step-next
+const stepNextBtn = document.getElementById('step-next');
+if (stepNextBtn) {
+  stepNextBtn.addEventListener('click', handleStepNext);
+}
+
+document.getElementById('btn-online').addEventListener('click', () => {
+  isOffline = false;
+  document.body.classList.remove('offline');
+  document.getElementById('btn-online').classList.add('active');
+  document.getElementById('btn-offline').classList.remove('active');
+});
+document.getElementById('btn-offline').addEventListener('click', () => {
+  isOffline = true;
+  document.body.classList.add('offline');
+  document.getElementById('btn-offline').classList.add('active');
+  document.getElementById('btn-online').classList.remove('active');
+});
+
+setTimeout(() => showScreen('home-multi'), 50);
+</script>
+
+</body>
+</html>
