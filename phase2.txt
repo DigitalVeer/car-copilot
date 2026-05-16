@@ -1,0 +1,894 @@
+ ▐▛███▜▌   Claude Code v2.1.143
+▝▜█████▛▘  Opus 4.7 · Claude Pro
+  ▘▘ ▝▝    ~/carcopilot
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ /model                                                                        
+  ⎿  Set model to Opus 4.7 with xhigh effort
+
+❯ Phase 1 is committed and passing — 16 passed in 0.12s, with override-DTC      
+  consolidation, route="none" for healthy, and cylinder template substitution   
+  verified. Now start Phase 2 from carcopilot_design.md §14: Gemma adapter,     
+  prompts, fallback, pipeline, demo scripts. Acceptance: docker compose exec    
+  app python demo/run_misfire.py prints a sensible Issue JSON with              
+  Gemma-generated synthesis matching the voice constraints in Appendix A. Then  
+  re-run with OLLAMA_HOST pointed at a nonexistent host and confirm the same    
+  Issue renders with using_fallback_text=true. Stop after acceptance for        
+  review.                                                                       
+
+  Read 11 files, listed 2 directories (ctrl+o to expand)
+
+● Bash(git log --oneline -20 && echo "---" && git status)
+  ⎿  Error: Exit code 128
+     fatal: your current branch 'master' does not have any commits yet
+
+● Bash(git branch -a 2>&1; echo "---"; git log --all --oneline 2>&1 | head -20;
+      echo "---"; ls /root/carcopilot/.git/refs/ 2>&1)
+  ⎿  ---
+     ---
+     heads
+     tags
+
+● Bash(pytest tests/ -q 2>&1 | tail -20)
+  ⎿  /bin/bash: line 1: pytest: command not found
+
+● Bash(source /root/carcopilot/.venv/bin/activate && pytest tests/ -q 2>&1 |
+      tail -20)
+  ⎿  ................
+        [100%]
+     16 passed in 0.13s
+
+● Fetch(https://ollama.com/library/gemma3)
+  ⎿  Received 106KB (200 OK)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ We are using Gemma 4 (that's the latest model)                                
+
+● Fetch(https://ollama.com/library/gemma4)
+  ⎿  Received 104.1KB (200 OK)
+
+  Searched for 1 pattern (ctrl+o to expand)
+● Bash(mkdir -p /root/carcopilot/prompts /root/carcopilot/demo && ls
+      /root/carcopilot/)
+  ⎿  2026-05-16-020317-local-command-caveatcaveat-the-messages-below.txt
+     CLAUDE.md
+     Dockerfile
+     … +8 lines (ctrl+o to expand)
+
+● Quick heads-up: git log shows no commits exist yet on this repo, so Phase 1
+  isn't actually committed despite the message. I'll proceed with Phase 2 and
+  call this out at the end so you can decide whether to commit Phase 1+2
+  together or split.
+
+  Also, the docker-compose has gemma4:e4b but .env.example still says gemma3:4b
+  — gemma4:e4b is the real edge tag (verified on ollama.com/library/gemma4), so
+  I'll align .env.example to match.
+
+● Write(prompts/system.md)
+  ⎿  Wrote 21 lines to prompts/system.md
+         eone's car.·COPILOT, a friend who explains what's wrong with som
+       3 WHO YOU'RE TALKING TO
+       4 The user is not a mechanic. Imagine someone with a tight budget,
+         n sense. Talk to them the way a friend who happens to know cars 
+         would talk to them on the phone.
+       6 VOICE
+       8 - Concrete, not abstract. "Two cylinders aren't firing right" — 
+         not "ignition system anomaly detected."
+      10 - Numbers help. "About $45 and 30 minutes" beats "low-cost, low-
+         effort repair."
+     … +22 lines (ctrl+o to expand)
+
+● Write(prompts/issue_synthesis.md)
+  ⎿  Wrote 23 lines to prompts/issue_synthesis.md
+      1 Generate a synthesis for the following car issue.
+      2 
+      3 VEHICLE: {vehicle} ({mileage} miles)
+      4 CLASSIFICATION: {severity} severity, {route} route
+      5 DIAGNOSED ISSUE: {title}
+      6 SHORT DESCRIPTION: {subtitle}
+      7 COST RANGE: ${cost_min}-${cost_max}
+      8 TIME ESTIMATE: {time_minutes} minutes
+      9 DRIVABILITY: {drivability}
+     … +18 lines (ctrl+o to expand)
+
+● Write(prompts/walkthrough.md)
+  ⎿  Wrote 19 lines to prompts/walkthrough.md
+      1 Generate a step-by-step walkthrough for the following repair.
+      2 
+      3 VEHICLE: {vehicle}
+      4 REPAIR: {title}
+      5 SHORT DESCRIPTION: {subtitle}
+      6 DIFFICULTY: {difficulty}
+      7 TIME ESTIMATE: {time_minutes} minutes
+      8 CATEGORY: {category}
+      9 LANGUAGE: {language}
+     … +15 lines (ctrl+o to expand)
+
+● Write(prompts/mechanic_draft.md)
+  ⎿  Wrote 22 lines to prompts/mechanic_draft.md
+      1 Draft a short text message the user can send to a mechanic.
+      2 
+      3 VEHICLE: {vehicle} ({mileage} miles)
+      4 DIAGNOSED ISSUE: {title}
+      5 SHORT DESCRIPTION: {subtitle}
+      6 EVIDENCE:
+      7 {dtcs}
+      8 {live_readings}
+      9 LANGUAGE: {language}
+     … +13 lines (ctrl+o to expand)
+
+● Write(prompts/history_pattern.md)
+  ⎿  Wrote 20 lines to prompts/history_pattern.md
+         attern. this user's repair history and identify any meaningful p
+       2 
+       3 VEHICLE: {vehicle}
+       4 
+       5 HISTORY (most recent first):
+       6 {entries}
+       7 
+       8 LANGUAGE: {language}
+       9 
+      10 A "meaningful pattern" is:
+     … +20 lines (ctrl+o to expand)
+
+● Write(src/carcopilot/gemma_adapter.py)
+  ⎿  Wrote 322 lines to src/carcopilot/gemma_adapter.py
+       2 """Local Gemma access via Ollama's HTTP API.
+         Gemma calls inly file that talks to the LLM. Every caller wraps 
+         k.py`` when themmaFailure`` and pulls canned text from ``fallbac
+       5 adapter gives up. Two retry budgets — network/parse errors and "
+       6 output — both fold into a single ``GemmaFailure`` so callers nev
+       7 the reason. The contract is: success → structured Pydantic, fail
+         ure → raise.
+       9 Ollama's ``format`` parameter is set to a JSON schema on every c
+      10 eliminates the "model returned broken JSON" failure mode at the 
+         model level.
+     … +361 lines (ctrl+o to expand)
+
+● Write(src/carcopilot/fallback.py)
+  ⎿  Wrote 277 lines to src/carcopilot/fallback.py
+         junk.nned text for when Gemma is unreachable, slow, or produces 
+       2 
+         mpts/system.md``od has a fallback here. The voice rules in ``pro
+       4 apply just as much to these strings — when Gemma fails, the user
+       5 talking to CAR·COPILOT.
+       6 
+         only re-gluext is owned by the DTC table (or override rule); we 
+       8 it onto the Issue. Walkthroughs and mechanic drafts are template
+       9 since the DTC table doesn't carry that shape of content.
+      10 """
+     … +317 lines (ctrl+o to expand)
+● Write(src/carcopilot/pipeline.py)
+  ⎿  Wrote 317 lines to src/carcopilot/pipeline.py
+         r, and fallback.st[Issue]. Orchestrates classifier, Gemma adapte
+       3 The classifier owns the deterministic fields (severity, route, t
+       4 time). Gemma owns synthesis, walkthrough, and mechanic draft. Wh
+         en Gemma
+         stitute connection refused, timeout, sanity check fails — we sub
+         _text = True``om ``fallback.py`` and mark ``Issue.using_fallback
+       7 so the UI can show a subtle dev indicator without changing layou
+       8 t.
+      10 ``asyncio.gather`` so a snapshot with multiple Issues doesn't pa
+         y 3x latency
+     … +350 lines (ctrl+o to expand)
+
+● Write(demo/__init__.py)
+  ⎿  Wrote 1 lines to demo/__init__.py
+      1 (No content)
+
+● Write(demo/_runner.py)
+  ⎿  Wrote 39 lines to demo/_runner.py
+      2 """Shared demo plumbing.
+      3 Each ``demo/run_*.py`` is a thin wrapper over ``run_scenario`` — 
+        load a
+      4 fixture, build issues, pretty-print the resulting JSON. The goal 
+        is that
+         same JSONompose exec app python demo/run_misfire.py`` prints the
+      6 the UI would consume.
+      7 """
+      8 
+      9 from __future__ import annotations
+     … +36 lines (ctrl+o to expand)
+
+● Write(demo/run_misfire.py)
+  ⎿  Wrote 13 lines to demo/run_misfire.py
+       2 """End-to-end demo: P0301 misfire scenario.
+       3 Loads ``tests/fixtures/obd_snapshots/misfire.json``, runs the fu
+         ll pipeline
+         ints theier → Gemma adapter → fallback if Gemma is down), and pr
+       5 resulting Issue JSON. This is what the UI's Issue page renders a
+         gainst.
+       7 """
+       8 from __future__ import annotations
+       9 
+      10 from _runner import run_scenario
+     … +6 lines (ctrl+o to expand)
+
+● Write(demo/run_overheat.py)
+  ⎿  Wrote 8 lines to demo/run_overheat.py
+      1 """End-to-end demo: overheat scenario (severe override + deferred
+         misfire)."""
+      2 
+      3 from __future__ import annotations
+      4 
+      5 from _runner import run_scenario
+      6 
+      7 if __name__ == "__main__":
+      8     run_scenario("overheat.json")
+
+● Write(demo/run_healthy.py)
+  ⎿  Wrote 8 lines to demo/run_healthy.py
+      1 """End-to-end demo: healthy snapshot (no DTCs, normal live readin
+        gs)."""
+      2 
+      3 from __future__ import annotations
+      4 
+      5 from _runner import run_scenario
+      6 
+      7 if __name__ == "__main__":
+      8     run_scenario("healthy.json")
+
+● Write(tests/test_gemma_adapter.py)
+  ⎿  Wrote 254 lines to tests/test_gemma_adapter.py
+       2 """Gemma adapter tests.
+         e retryk-based tests run in CI and exercise the success path, th
+       4 budget, and the sanity-check failure path. A second test class v
+       5 no-network fallback: pointed at a nonexistent host with a tiny r
+         etry budget
+         r than hangimeout, the adapter must raise ``GemmaFailure`` rathe
+       8 or throw a raw network error.
+       9 The Phase 2 acceptance case — "re-run with OLLAMA_HOST pointed a
+      10 nonexistent host and confirm the same Issue renders with using_f
+         allback_text
+     … +283 lines (ctrl+o to expand)
+
+● Write(tests/test_pipeline.py)
+  ⎿  Wrote 157 lines to tests/test_pipeline.py
+      2 """Pipeline tests — full snapshot → Issue flow.
+      3 The classifier already has its own tests; here we verify the wiri
+      4 classification, Gemma adapter, and fallback. The first test uses 
+        a stub
+      5 adapter that returns canned successful results. The second simula
+      6 Phase 2 acceptance condition: point the real adapter at a nonexis
+        tent host
+         whilenfirm every Issue renders with ``using_fallback_text=True``
+      8 keeping the deterministic fields intact.
+      9 """
+     … +173 lines (ctrl+o to expand)
+
+● Bash(source /root/carcopilot/.venv/bin/activate && pip install -e . -q 2>&1 |
+      tail -5)
+  ⎿  (No output)
+
+● Bash(source .venv/bin/activate && pytest tests/ -q 2>&1 | tail -40)
+  ⎿          request = self._request
+             if request is None:
+     >           raise RuntimeError(
+     … +39 lines (ctrl+o to expand)
+
+● Update(tests/test_gemma_adapter.py)
+  ⎿  Added 2 lines
+      245          if isinstance(item, _RaiseOnce):
+      246              raise item.exc
+      247          body = {"message": {"content": json.dumps(item)}}
+      248 +        request = httpx.Request("POST", url)                  
+      249          return httpx.Response(
+      250              200,
+      251              content=json.dumps(body).encode(),
+      252              headers={"content-type": "application/json"},
+      253 +            request=request,                                  
+      254          )
+      255  
+      256      monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+● Update(src/carcopilot/pipeline.py)
+  ⎿  Added 1 line, removed 1 line
+      242      misleading.
+      243      """
+      244      want_walkthrough = issue.route in ("diy", "safety")
+      245 -    want_mechanic = issue.route != "safety"                   
+      245 +    want_mechanic = issue.route in ("diy", "expert")          
+      246  
+      247      tasks: list[asyncio.Future] = []
+      248      labels: list[str] = []
+
+● Bash(source .venv/bin/activate && pytest tests/ -q 2>&1 | tail -30)
+  ⎿  ............................
+        [100%]
+     28 passed in 0.75s
+● Bash(docker --version 2>&1; docker compose version 2>&1; docker ps 2>&1 | head
+       -5)
+  ⎿  Docker version 29.4.0, build 9d7ad9f
+     Docker Compose version v5.1.2
+     CONTAINER ID   IMAGE                           COMMAND
+     … +11 lines (ctrl+o to expand)
+
+● Bash(docker compose exec ollama ollama list 2>&1)
+  ⎿  NAME    ID    SIZE    MODIFIED
+
+● Bash(docker compose exec ollama ollama list 2>&1; echo "---"; docker volume
+      inspect carcopilot_ollama-data 2>&1 | head -10; echo "---disk---"; df -h |
+       head -5)
+  ⎿  NAME    ID    SIZE    MODIFIED
+     ---
+     [
+     … +20 lines (ctrl+o to expand)
+
+● I need to pull the gemma4:e4b model — it's about 5-6GB so I'll run it in the
+  background and continue verifying everything else in parallel.
+
+● Bash(docker compose exec -T ollama ollama pull gemma4:e4b 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Update(.env.example)
+  ⎿  File must be read first
+
+● Bash(docker compose exec -T app pip install -e . -q 2>&1 | tail -5)
+  ⎿  WARNING: Running pip as the 'root' user can result in broken permissio
+     ns and conflicting behaviour with the system package manager. It is re
+     commended to use a virtual environment instead: https://pip.pypa.io/wa
+     … +4 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(.env.example)
+  ⎿  Added 1 line, removed 1 line
+      1  OLLAMA_HOST=http://localhost:11434
+      2 -GEMMA_MODEL=gemma3:4b                                           
+      2 +GEMMA_MODEL=gemma4:e4b                                          
+      3  GEMMA_TIMEOUT_S=30
+      4  GEMMA_MAX_RETRIES=2
+      5  LOG_LEVEL=INFO
+
+● Bash(docker compose exec -T -e OLLAMA_HOST=http://nonexistent:99999 -e
+      GEMMA_TIMEOUT_S=2 -e GEMMA_MAX_RETRIES=0 app python demo/run_misfire.py
+      2>&1 | head -80)
+  ⎿  Gemma attempt 1/1 failed:
+     Gemma attempt 1/1 failed:
+     Gemma attempt 1/1 failed:
+     … +31 lines (ctrl+o to expand)
+
+● Bash(docker compose exec -T -e OLLAMA_HOST=http://nonexistent:99999 -e
+      GEMMA_TIMEOUT_S=2 -e GEMMA_MAX_RETRIES=0 app python demo/run_misfire.py
+      2>&1 | tail -80)
+  ⎿                  'status': 'normal',
+                     'note': None
+                 },
+     … +42 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● The fallback path works end-to-end with using_fallback_text: True. Let me
+  polish two voice rough edges in the fallback mechanic draft while the Gemma
+  model finishes pulling.
+
+● Update(src/carcopilot/fallback.py)
+  ⎿  Added 15 lines, removed 9 lines
+      253  
+      254  def mechanic_draft_for(issue: Issue) -> str:
+      255      """Return a canned text-to-mechanic draft for an Issue."""
+      256 -    code_line = ""                                            
+      256 +    symptom_line: str                                         
+      257      if issue.dtcs:
+      258          primary = issue.dtcs[0]
+      259 -        code_line = f" The code that came up is {primary.code}
+          - — {primary.description.lower()}."                            
+      259 +        symptom_line = (                                      
+      260 +            f"It's showing a {primary.code} — {primary.descrip
+          +tion.lower()}."                                               
+      261 +        )                                                     
+      262 +    else:                                                     
+      263 +        symptom_line = f"It's showing what looks like {issue.t
+          +itle.lower()}."                                               
+      264  
+      261 -    cost_line = ""                                            
+      265 +    diagnosis_line = f"Best guess is {issue.title.lower()}, bu
+          +t I'd like you to confirm."                                   
+      266 +                                                              
+      267      if issue.meta.cost_usd_min is not None and issue.meta.cost
+           _usd_max is not None:
+      268          cost_line = (
+      264 -            f" I've seen $ {issue.meta.cost_usd_min}–${issue.m
+          -eta.cost_usd_max} quoted online "                             
+      265 -            "but I'd like your take."                         
+      269 +            f"I've seen ${issue.meta.cost_usd_min}–${issue.met
+          +a.cost_usd_max} quoted online "                               
+      270 +            "but I'd value your take."                        
+      271          )
+      272      else:
+      268 -        cost_line = " Could you give me a rough estimate befor
+          -e I bring it in?"                                             
+      273 +        cost_line = "Could you give me a rough estimate before
+          + I bring it in?"                                              
+      274  
+      275      return (
+      276          f"Hi — I've got a {issue.vehicle.display_name} with ab
+           out "
+      272 -        f"{issue.vehicle.mileage or 'unknown'} miles on it. " 
+      273 -        f"It looks like {issue.title.lower()}.{code_line} "   
+      274 -        "Money's a bit tight so I'm trying to plan ahead."    
+      277 +        f"{issue.vehicle.mileage or 'unknown'} miles. "       
+      278 +        f"{symptom_line} "                                    
+      279 +        f"{diagnosis_line} "                                  
+      280 +        "Money's a bit tight so I'm trying to plan ahead. "   
+      281          f"{cost_line} "
+      282          "Happy to drop it off at my current location whenever 
+           works for you."
+      283      ).strip()
+
+● Bash(source .venv/bin/activate && pytest tests/ -q 2>&1 | tail -10)
+  ⎿  ............................
+        [100%]
+     28 passed in 1.64s
+
+● I'll wait for the model pull to complete (notification fires automatically).
+  All 28 tests pass; fallback path is verified end-to-end. Once the model lands
+  I'll run the live-Gemma demo.
+
+● The ollama pull is running in the background and I'll be notified when it
+  finishes — no polling needed. Just waiting now.
+✻ Sautéed for 8m 2s
+
+※ recap: Building Phase 2 of CAR·COPILOT (Gemma adapter, prompts, fallback, pipeline, demos): all 28 tests pass and the bad-host fallback path is verified end-to-end. Next: once the `gemma4:e4b` pull finishes, run the misfire demo against live Gemma for final acceptance. (disable recaps in /config)
+
+● Background command "Pull gemma4:e4b in background" completed (exit code 0)
+
+● Bash(docker compose exec -T ollama ollama list 2>&1)
+  ⎿  NAME          ID              SIZE      MODIFIED
+     gemma4:e4b    c6eb396dbd59    9.6 GB    3 seconds ago
+
+● Bash(docker compose exec -T -e GEMMA_TIMEOUT_S=120 app python
+      demo/run_misfire.py 2>&1 | tail -120)
+  ⎿  Running in the background (↓ to manage)
+  ⎿  (timeout 5m)
+
+  Read 1 file (ctrl+o to expand)
+
+● Waiting for the model's first-call warmup + three Gemma generations to
+  complete. I'll be notified when the demo exits.
+
+✻ Crunched for 4m 14s
+
+● Background command "Run live Gemma demo (first call warm-loads the model)"
+completed (exit code 0)
+
+  Searched for 1 pattern, read 3 files (ctrl+o to expand)
+
+● Bash(time docker compose exec -T ollama curl -s
+      http://localhost:11434/api/chat -d
+      '{"model":"gemma4:e4b","messages":[{"role":"user","content":"Say hello in
+      5 words.…)
+  ⎿  OCI runtime exec failed: exec failed: unable to start container proces
+     s: exec: "curl": executable file not found in $PATH
+     … +3 lines (ctrl+o to expand)
+
+● Bash(time curl -s http://localhost:11434/api/chat -d
+      '{"model":"gemma4:e4b","messages":[{"role":"user","content":"Say hello in
+      5 words."}],"stream":false}' 2>&1 | he…)
+  ⎿  {
+       "model": "gemma4:e4b",
+       "created_at": "2026-05-16T10:10:30.051640704Z",
+     … +16 lines (ctrl+o to expand)
+
+● Bash(time curl -s http://localhost:11434/api/chat -d '{
+        "model":"gemma4:e4b",…)
+  ⎿  {
+       "model": "gemma4:e4b",
+       "created_at": "2026-05-16T10:14:45.333370928Z",
+     … +54 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● Fetch(https://ollama.readthedocs.io/en/latest/api/)
+  ⎿  Received 0 bytes (404 Not Found)
+
+● Fetch(https://github.com/ollama/ollama/blob/main/docs/api.md)
+  ⎿  Received 1018.7KB (200 OK)
+
+● Update(src/carcopilot/gemma_adapter.py)
+  ⎿  Added 4 lines, removed 1 line
+      36  
+      37  DEFAULT_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:
+          11434")
+      38  DEFAULT_MODEL = os.environ.get("GEMMA_MODEL", "gemma4:e4b")
+      39 -DEFAULT_TIMEOUT_S = float(os.environ.get("GEMMA_TIMEOUT_S", "30
+         -"))                                                            
+      39 +# Gemma 4 generations of synthesis/walkthrough/draft each take 
+         +~30–60s on                                                     
+      40 +# commodity hardware. 120s gives one call comfortable headroom;
+         + the pipeline                                                  
+      41 +# runs the three calls concurrently so wall time is bounded by 
+         +the slowest.                                                   
+      42 +DEFAULT_TIMEOUT_S = float(os.environ.get("GEMMA_TIMEOUT_S", "12
+         +0"))                                                           
+      43  DEFAULT_MAX_RETRIES = int(os.environ.get("GEMMA_MAX_RETRIES", "
+          2"))
+      44  
+      45  _PROMPTS_DIR_DEFAULT = Path(__file__).resolve().parent.parent.p
+          arent / "prompts"
+
+● Update(src/carcopilot/gemma_adapter.py)
+  ⎿  Added 1 line, removed 1 line
+      149              language=language,
+      150          )
+      151  
+      152 -        data = await self._call_with_retry(user_prompt, _SYNTH
+          -ESIS_SCHEMA)                                                  
+      152 +        data = await self._call_with_retry(user_prompt, _SYNTH
+          +ESIS_SCHEMA, num_predict=300)                                 
+      153          try:
+      154              result = SynthesisResult.model_validate(data)
+      155          except ValidationError as e:
+
+● Update(src/carcopilot/gemma_adapter.py)
+  ⎿  Added 1 line, removed 1 line
+      174              language=language,
+      175          )
+      176  
+      177 -        data = await self._call_with_retry(user_prompt, _WALKT
+          -HROUGH_SCHEMA)                                                
+      177 +        data = await self._call_with_retry(user_prompt, _WALKT
+          +HROUGH_SCHEMA, num_predict=900)                               
+      178          raw_steps = data.get("steps", [])
+      179          if not isinstance(raw_steps, list) or not raw_steps:
+      180              raise GemmaFailure("walkthrough: no steps returned
+           ")
+
+● Update(src/carcopilot/gemma_adapter.py)
+  ⎿  Added 1 line, removed 1 line
+      204              language=language,
+      205          )
+      206  
+      207 -        data = await self._call_with_retry(user_prompt, _MECHA
+          -NIC_DRAFT_SCHEMA)                                             
+      207 +        data = await self._call_with_retry(user_prompt, _MECHA
+          +NIC_DRAFT_SCHEMA, num_predict=400)                            
+      208          draft = data.get("draft")
+      209          if not isinstance(draft, str) or len(draft.strip()) < 
+           30:
+      210              raise GemmaFailure("mechanic_draft: output failed 
+           sanity check")
+
+● Update(src/carcopilot/gemma_adapter.py)  ⎿  Added 1 line, removed 1 line
+      228              language=language,
+      229          )
+      230  
+      231 -        data = await self._call_with_retry(user_prompt, _HISTO
+          -RY_PATTERN_SCHEMA)                                            
+      231 +        data = await self._call_with_retry(user_prompt, _HISTO
+          +RY_PATTERN_SCHEMA, num_predict=500)                           
+      232          raw_patterns = data.get("patterns", [])
+      233          patterns: list[HistoryPattern] = []
+      234          for raw in raw_patterns:
+
+● Update(src/carcopilot/gemma_adapter.py)
+  ⎿  Added 22 lines, removed 4 lines
+      246          template = (self.prompts_dir / filename).read_text()
+      247          return template.format(**fields)
+      248  
+      249 -    async def _call_with_retry(self, user_prompt: str, schema:
+          - dict[str, Any]) -> dict[str, Any]:                           
+      249 +    async def _call_with_retry(                               
+      250 +        self,                                                 
+      251 +        user_prompt: str,                                     
+      252 +        schema: dict[str, Any],                               
+      253 +        num_predict: int | None = None,                       
+      254 +    ) -> dict[str, Any]:                                      
+      255          last_err: Exception | None = None
+      256          for attempt in range(self.max_retries + 1):
+      257              try:
+      253 -                return await self._call_ollama(user_prompt, sc
+          -hema)                                                         
+      258 +                return await self._call_ollama(user_prompt, sc
+          +hema, num_predict)                                            
+      259              except (httpx.HTTPError, json.JSONDecodeError) as 
+           e:
+      260                  last_err = e
+      261                  logger.warning(
+     ...
+      266                  )
+      267          raise GemmaFailure(f"all {self.max_retries + 1} attemp
+           ts failed: {last_err}")
+      268  
+      264 -    async def _call_ollama(self, user_prompt: str, schema: dic
+          -t[str, Any]) -> dict[str, Any]:                               
+      269 +    async def _call_ollama(                                   
+      270 +        self,                                                 
+      271 +        user_prompt: str,                                     
+      272 +        schema: dict[str, Any],                               
+      273 +        num_predict: int | None = None,                       
+      274 +    ) -> dict[str, Any]:                                      
+      275 +        # ``think: false`` disables Gemma 4's chain-of-thought
+          + block, which would                                           
+      276 +        # otherwise add tens of seconds and tokens we never re
+          +ad. Output is                                                 
+      277 +        # constrained by ``format`` (JSON schema) and bounded 
+          +by ``num_predict``                                            
+      278 +        # so a chatty model can't blow past the timeout.      
+      279 +        options: dict[str, Any] = {"temperature": 0.3}        
+      280 +        if num_predict is not None:                           
+      281 +            options["num_predict"] = num_predict              
+      282          body = {
+      283              "model": self.model,
+      284              "messages": [
+     ...
+      287              ],
+      288              "format": schema,
+      289              "stream": False,
+      273 -            "options": {"temperature": 0.3},                  
+      290 +            "think": False,                                   
+      291 +            "options": options,                               
+      292          }
+      293          async with httpx.AsyncClient(timeout=self.timeout_s) a
+           s client:
+      294              r = await client.post(f"{self.host}/api/chat", jso
+           n=body)
+
+● Bash(source .venv/bin/activate && pytest tests/ -q 2>&1 | tail -10)
+  ⎿  ............................
+        [100%]
+     28 passed in 0.91s
+
+● Bash(time curl -s http://localhost:11434/api/chat -d '{
+        "model":"gemma4:e4b",…)
+  ⎿  {
+       "synthesis": "The car is showing a rough idle and a misfire specific
+     ally on cylinder one, which points directly to the ignition coil needi
+     … +11 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● Bash(docker compose exec -T app python demo/run_misfire.py 2>&1 | tee
+      /tmp/demo_live.txt | tail -80)
+  ⎿              },
+                 {
+                     'key': 'Short-term fuel trim',
+     … +43 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● Live Gemma demo works — using_fallback_text: False, voice matches Appendix A.
+  Now re-running with bad host for the second acceptance check.
+
+● Bash(docker compose exec -T -e OLLAMA_HOST=http://nonexistent:99999 -e
+      GEMMA_TIMEOUT_S=2 -e GEMMA_MAX_RETRIES=0 app python demo/run_misfire.py
+      2>&1 | tee /tmp/demo_f…)
+  ⎿              }
+             ],
+             'related_issue_ids': [],
+     … +29 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Phase 2 is complete and both acceptance criteria pass. Stopping for review.
+
+  Phase 2 deliverables
+
+  File:
+  prompts/{system,issue_synthesis,walkthrough,mechanic_draft,history_pattern}.md
+  Purpose: Versioned prompts per Appendix A
+  ────────────────────────────────────────
+  File: src/carcopilot/gemma_adapter.py
+  Purpose: Ollama HTTP wrapper, JSON-schema-constrained, think:false, retry →
+    GemmaFailure
+  ────────────────────────────────────────
+  File: src/carcopilot/fallback.py
+  Purpose: Canned synthesis (from DTC table), per-category walkthroughs,
+    templated mechanic draft
+  ────────────────────────────────────────
+  File: src/carcopilot/pipeline.py
+  Purpose: build_issues(), classifier → skeleton, asyncio.gather over 3 Gemma
+    calls, fallback wiring, using_fallback_text flag
+  ────────────────────────────────────────
+  File: demo/run_{misfire,overheat,healthy}.py
+  Purpose: End-to-end runners
+  ────────────────────────────────────────
+  File: tests/test_gemma_adapter.py + tests/test_pipeline.py
+  Purpose: 12 new tests — mock httpx, retry budget, sanity-check, bad-host
+    fallback, severe-route routing, healthy skip
+
+  Acceptance evidence
+
+  Live Gemma (gemma4:e4b in docker compose) — using_fallback_text: false:
+
+  synthesis: "The car is misfiring because the ignition coil on cylinder 1 is
+  bad.
+              You just need to swap out that single coil, which is a simple job
+              using a 10mm socket. This fix will cost about $40 to $60 and take
+              about 30 minutes."
+  good_news: "This is a very easy fix you can do yourself."
+  walkthrough_steps: 5 steps, action titles, concrete physical descriptions
+  mechanic_draft: 4 sentences, names car/code/suspect/budget
+
+  Fallback path (OLLAMA_HOST=http://nonexistent:99999) — same Issue structure,
+  using_fallback_text: true, canned text from dtc_table.fallback_synthesis +
+  fallback.walkthrough_for() + fallback.mechanic_draft_for().
+
+  All 28 tests pass (16 classifier + 9 gemma_adapter + 4 pipeline -- wait,
+  28-16=12, so 8 adapter + 4 pipeline). Tests are fully offline-runnable.
+
+  Things to review
+
+  1. Git state: despite the briefing saying "Phase 1 is committed", git log
+  shows no commits exist. Phase 1 lives only in the working tree. Decide whether
+   to commit Phase 1 separately or bundle Phase 1+2.
+  2. Design doc contradiction — §7 says walkthrough generates only for route == 
+  "diy", but §11.3 says the Severe Issue page renders walkthrough_steps inline.
+  I sided with §11.3 (UI contract wins) — pipeline generates walkthroughs for
+  diy and safety routes. Worth confirming.
+  3. .env.example updated from gemma3:4b → gemma4:e4b to match
+  docker-compose.yml. Verified gemma4:e4b is a real tag on
+  ollama.com/library/gemma4.
+  4. Tuning: GEMMA_TIMEOUT_S default bumped 30→120; calls send think:false + a
+  per-method num_predict to keep Gemma 4 from rambling.
+
+  Stopping per your instructions. Ready to commit on your say-so.
+
+✻ Brewed for 9m 20s
+
+※ recap: Phase 2 (Gemma adapter + pipeline + fallback + demos) is complete and both acceptance checks pass — live Gemma gives sensible Issue JSON, bad host falls back with using_fallback_text=true. Next action is your review, then commit Phase 1+2. (disable recaps in /config)
+
+❯ Two edits to prompts/issue_synthesis.md, then regenerate:                     
+  a. Add a rule: "Reference at least two specific live readings or DTC signals  
+  that support the diagnosis. Show the connection between what you observed and 
+   what you concluded — 'these readings + this car's age → this likely cause.'  
+  Don't just name the problem; explain how you got there."                      
+  b. For good_news: "Phrase as a friend reassuring a friend. 'I can walk you    
+  through it' beats 'This is fixable.' Use 'your car,' not 'the car.'"          
+  Then run demo/run_misfire.py, paste the synthesis + good_news, and we'll see  
+  if it landed.                                                                 
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(prompts/issue_synthesis.md)
+  ⎿  Added 2 lines, removed 2 lines
+      17  LANGUAGE: {language}
+      18  
+      19  Generate:
+      20 -- "synthesis": 1-3 sentences naming the problem concretely. If 
+         -multiple readings point to the same cause, name the cause, not 
+         -the readings. Stay inside the cost and time figures above — don
+         -'t invent numbers.                                             
+      21 -- "good_news": optional. Only include if there is genuinely goo
+         -d news (cheap, fast, DIY-friendly). Single sentence. Otherwise 
+         -omit the field entirely.                                       
+      20 +- "synthesis": 1-3 sentences naming the problem concretely. Ref
+         +erence at least two specific live readings or DTC signals that 
+         +support the diagnosis. Show the connection between what you obs
+         +erved and what you concluded — "these readings + this car's age
+         + → this likely cause." Don't just name the problem; explain how
+         + you got there. Stay inside the cost and time figures above — d
+         +on't invent numbers.                                           
+      21 +- "good_news": optional. Only include if there is genuinely goo
+         +d news (cheap, fast, DIY-friendly). Single sentence. Phrase as 
+         +a friend reassuring a friend. "I can walk you through it" beats
+         + "This is fixable." Use "your car," not "the car." Otherwise om
+         +it the field entirely.                                         
+      22  
+      23  JSON ONLY. No preamble, no markdown.
+
+● Bash(docker compose exec -T app python demo/run_misfire.py 2>&1 | tee
+      /tmp/demo_v2.txt | python3 -c "
+      import sys, re, json…)
+  ⎿  synthesis: The P0301 code and the rough idle at 740 rpm point
+     straight to a bad ignition coil on cylinder 1. Since the car is a 2009
+      model,
+     … +6 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● Both rules landed.
+
+  synthesis:
+
+  ▎ The P0301 code and the rough idle at 740 rpm point straight to a bad 
+  ▎ ignition coil on cylinder 1. Since the car is a 2009 model, that coil is 
+  ▎ probably just worn out and needs replacing. You can swap this out yourself 
+  ▎ with a 10mm socket for about $40-$60 and it should take 30 minutes.
+
+  good_news:
+
+  ▎ I can walk you through it.
+
+  Quick read:
+  - Rule (a) — two specific signals cited (P0301 + 740 rpm "rough idle"),
+  connected to car age, then to the likely cause. Reasoning chain is visible.
+  Could go deeper — the O2 0.92V rich and fuel trim +14% are sitting there
+  unused — but minimum bar is met.
+  - Rule (b) — Good news nails the friend-voice swap. "I can walk you through
+  it" is exactly what the rule asked for. "Your car" didn't show up because the
+  line is too short to need a noun, but the tone is right.
+
+  If you want the synthesis to weave in all four signals (code + rpm + O2 + fuel
+   trim), I can tighten the rule to "reference at least three" or call out the
+  specific reading types — let me know.
+
+✻ Baked for 2m 54s
+
+※ recap: Phase 2 (Gemma adapter + pipeline + demos) is done and passing acceptance — live misfire demo produces voiced synthesis citing P0301 and 740 rpm, good_news reads as friend-to-friend. Next action: your review, then commit Phase 1+2.
+
+❯ Add to the rules: "Do not name DTC codes (P0301, P0420, etc.) in the          
+  synthesis. Translate to plain language: P0301 → 'cylinder 1 misfire' or       
+  'cylinder 1 keeps misfiring.' The user sees the codes in the evidence section 
+   below; the synthesis is the friend-voice translation."                       
+  Add to the rules: "Do not restate cost, time, or difficulty in the synthesis  
+  — those values already appear deterministically in the card's meta line. The  
+  synthesis is for reasoning about why this is happening, not for repeating     
+  numbers. Keep cost mentions in good_news only, if at all."                    
+  Then regenerate demo/run_misfire.py and paste the synthesis + good_news.      
+
+● Update(prompts/issue_synthesis.md)
+  ⎿  Added 1 line, removed 1 line
+      17  LANGUAGE: {language}
+      18  
+      19  Generate:
+      20 -- "synthesis": 1-3 sentences naming the problem concretely. Ref
+         -erence at least two specific live readings or DTC signals that 
+         -support the diagnosis. Show the connection between what you obs
+         -erved and what you concluded — "these readings + this car's age
+         - → this likely cause." Don't just name the problem; explain how
+         - you got there. Stay inside the cost and time figures above — d
+         -on't invent numbers.                                           
+      20 +- "synthesis": 1-3 sentences naming the problem concretely. Ref
+         +erence at least two specific live readings or DTC signals that 
+         +support the diagnosis. Show the connection between what you obs
+         +erved and what you concluded — "these readings + this car's age
+         + → this likely cause." Don't just name the problem; explain how
+         + you got there. Do not name DTC codes (P0301, P0420, etc.) in t
+         +he synthesis. Translate to plain language: P0301 → "cylinder 1 
+         +misfire" or "cylinder 1 keeps misfiring." The user sees the cod
+         +es in the evidence section below; the synthesis is the friend-v
+         +oice translation. Do not restate cost, time, or difficulty in t
+         +he synthesis — those values already appear deterministically in
+         + the card's meta line. The synthesis is for reasoning about why
+         + this is happening, not for repeating numbers. Keep cost mentio
+         +ns in good_news only, if at all.                               
+      21  - "good_news": optional. Only include if there is genuinely goo
+          d news (cheap, fast, DIY-friendly). Single sentence. Phrase as 
+          a friend reassuring a friend. "I can walk you through it" beats
+           "This is fixable." Use "your car," not "the car." Otherwise om
+          it the field entirely.
+      22  
+      23  JSON ONLY. No preamble, no markdown.
+
+● Bash(docker compose exec -T app python demo/run_misfire.py 2>&1 | tee
+      /tmp/demo_v3.txt | python3 -c "
+      import sys, re…)
+  ⎿  synthesis: (not found)
+
+     good_news: This is a simple fix; you just need a 10mm socket and it
+     should take about 30 minutes.
+  ⎿  (timeout 5m)
+  Searched for 1 pattern (ctrl+o to expand)
+
+● synthesis:
+
+  ▎ Your car is shaking a bit at idle and cylinder 1 keeps misfiring, which is 
+  ▎ probably because the ignition coil for that cylinder is shot. The rough idle
+  ▎  and the fuel trim showing it's trying to compensate point right to a bad 
+  ▎ spark at cylinder 1. Given your Corolla's age, a bad coil is the most likely
+  ▎  culprit here.
+
+  good_news:
+
+  ▎ This is a simple fix; you just need a 10mm socket and it should take about 
+  ▎ 30 minutes.
+
+  Synthesis hits everything:
+  - No code names — "P0301" became "cylinder 1 keeps misfiring".
+  - No cost/time/difficulty mentions.
+  - Two signals cited (rough idle + fuel trim compensating), connected to car
+  age, connected to likely cause.
+  - "Your car" landed naturally.
+
+  good_news regressed though. Last round it was "I can walk you through it" (the
+   example from your rule). This round it leaked time + tool back in ("30
+  minutes," "10mm socket") and slid toward "This is fixable" phrasing the rule
+  explicitly told it not to use. The new "no time in synthesis" rule probably
+  nudged the model to put time somewhere, and good_news was the only place left.
+
+  If you want, I can tighten the good_news rule with the same prohibition: "do
+  not restate cost, time, or tool requirements unless the cost itself is the
+  good news (e.g., 'and it's only $20')." Otherwise it's a model-instability
+  artifact that may settle on its own across runs.
+
+✻ Cogitated for 2m 24s

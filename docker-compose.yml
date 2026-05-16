@@ -5,6 +5,20 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+    environment:
+      # Flash attention + a tighter context window let gemma4:e4b sit fully on
+      # the 10GB RTX 3080. Our biggest prompt+output (walkthrough, ~1500 toks)
+      # is well under 2048, so the trim is free.
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_CONTEXT_LENGTH=2048
+      - OLLAMA_KV_CACHE_TYPE=q8_0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
