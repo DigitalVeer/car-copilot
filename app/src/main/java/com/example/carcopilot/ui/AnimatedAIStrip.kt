@@ -1,97 +1,95 @@
 package com.example.carcopilot.ui
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.carcopilot.model.Severity
+import com.example.carcopilot.ui.components.ThinkingDots
+import com.example.carcopilot.ui.components.accentColor
+import com.example.carcopilot.ui.theme.CarCopilotColors
+import com.example.carcopilot.ui.theme.CarCopilotTypography
 
+/**
+ * The hero component. A 2dp severity-colored bar runs the full height of the
+ * label + body column. Body shape depends on SynthesisState:
+ *   - Thinking  → ThinkingDots
+ *   - Streaming → partial text
+ *   - Ready     → synthesis, optionally followed by good_news
+ * The label color matches the severity. `isFallback` is intentionally not
+ * surfaced — the user just sees the canned text; the diagnostic signal lives
+ * in logs.
+ */
 @Composable
-fun AnimatedAIStrip(state: SynthesisState, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1A1F2C))
-            .padding(16.dp),
-    ) {
-        when (state) {
-            is SynthesisState.Thinking -> ThinkingDots()
-            is SynthesisState.Streaming -> Text(
-                text = state.partial,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color(0xFFE6E8EE),
+fun AnimatedAIStrip(
+    state: SynthesisState,
+    label: String,
+    severity: Severity,
+    modifier: Modifier = Modifier,
+    outerPadding: PaddingValues = PaddingValues(bottom = 32.dp),
+) {
+    val accent = severity.accentColor()
+    Box(modifier = modifier.fillMaxWidth().padding(outerPadding)) {
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .fillMaxHeight()
+                    .background(accent),
             )
-            is SynthesisState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(start = 14.dp, top = 4.dp, bottom = 4.dp)
+                    .defaultMinSize(minHeight = 52.dp),
+            ) {
                 Text(
-                    text = state.synthesis,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFFE6E8EE),
+                    text = label,
+                    style = CarCopilotTypography.AiLabel,
+                    color = accent,
                 )
-                state.goodNews?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF8FB9FF),
-                    )
-                }
-                if (state.isFallback) {
-                    Text(
-                        text = "(offline mode)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF6A7187),
-                    )
-                }
+                Spacer(Modifier.height(10.dp))
+                AiBody(state = state, severity = severity)
             }
         }
     }
 }
 
 @Composable
-fun ThinkingDots() {
-    val transition = rememberInfiniteTransition(label = "thinking")
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        repeat(3) { idx ->
-            val alpha by transition.animateFloat(
-                initialValue = 0.2f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 600, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse,
-                    initialStartOffset = androidx.compose.animation.core.StartOffset(idx * 200),
-                ),
-                label = "dot$idx",
+private fun AiBody(state: SynthesisState, severity: Severity) {
+    when (state) {
+        is SynthesisState.Thinking -> ThinkingDots(severity)
+        is SynthesisState.Streaming -> Text(
+            text = state.partial,
+            style = CarCopilotTypography.AiBody,
+            color = CarCopilotColors.Text,
+        )
+        is SynthesisState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = state.synthesis,
+                style = CarCopilotTypography.AiBody,
+                color = CarCopilotColors.Text,
             )
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .alpha(alpha)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFE6E8EE)),
-            )
-            if (idx < 2) Spacer(Modifier.width(6.dp))
+            state.goodNews?.let { news ->
+                Text(
+                    text = news,
+                    style = CarCopilotTypography.AiBody,
+                    color = CarCopilotColors.Text,
+                )
+            }
         }
     }
 }

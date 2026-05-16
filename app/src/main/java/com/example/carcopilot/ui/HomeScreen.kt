@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import com.example.carcopilot.model.FALLBACK_GOOD_NEWS_MISFIRE
 import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
 import com.example.carcopilot.model.Issue
+import com.example.carcopilot.ui.components.TopBar
+import com.example.carcopilot.ui.components.TopBarLeft
 import kotlinx.coroutines.delay
 
 /**
@@ -52,35 +54,24 @@ fun HomeScreen(misfire: Issue, onIssueClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0E14))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .background(Color(0xFF0B0E14)),
     ) {
-        TopBar()
-        AnimatedAIStrip(state)
-        IssueCard(misfire, onClick = onIssueClick)
-        AlsoRow(text = "Also: 12V battery is reading a little low.")
-        AlsoRow(text = "Also: due for oil in about 1,500 miles.")
-        Spacer(Modifier.fillMaxWidth().height(0.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-            BottomTabBar(selected = "Home")
+        TopBar(left = TopBarLeft.Brand(vehicleSubtitle = misfire.vehicle.displayName))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            AnimatedAIStrip(state = state, label = "Today's drive", severity = misfire.severity)
+            IssueCard(misfire, onClick = onIssueClick)
+            AlsoRow(text = "Also: 12V battery is reading a little low.")
+            AlsoRow(text = "Also: due for oil in about 1,500 miles.")
+            Spacer(Modifier.fillMaxWidth().height(0.dp))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+                BottomTabBar(selected = "Home")
+            }
         }
-    }
-}
-
-@Composable
-private fun TopBar() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "CAR · COPILOT",
-            style = MaterialTheme.typography.titleMedium,
-            color = Color(0xFFE6E8EE),
-        )
-        Text("2009 Corolla", color = Color(0xFF8E94A6))
     }
 }
 

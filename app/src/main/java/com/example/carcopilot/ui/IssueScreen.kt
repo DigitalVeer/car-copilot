@@ -34,6 +34,8 @@ import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.LiveReading
 import com.example.carcopilot.model.LiveStatus
+import com.example.carcopilot.ui.components.TopBar
+import com.example.carcopilot.ui.components.TopBarLeft
 
 @Composable
 fun IssueScreen(issue: Issue, gemma: GemmaService, onBack: () -> Unit) {
@@ -80,36 +82,28 @@ fun IssueScreen(issue: Issue, gemma: GemmaService, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0B0E14))
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .verticalScroll(rememberScrollState()),
     ) {
-        TopBar(onBack = onBack)
-        AnimatedAIStrip(state)
-        IssueMetaCard(issue)
-        EvidenceToggle(open = evidenceOpen, onClick = { evidenceOpen = !evidenceOpen })
-        if (evidenceOpen) {
-            EvidenceContent(issue.dtcs, issue.liveReadings)
+        TopBar(left = TopBarLeft.Back(onBack = onBack))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            AnimatedAIStrip(
+                state = state,
+                label = "Here's what I'm seeing",
+                severity = issue.severity,
+            )
+            IssueMetaCard(issue)
+            EvidenceToggle(open = evidenceOpen, onClick = { evidenceOpen = !evidenceOpen })
+            if (evidenceOpen) {
+                EvidenceContent(issue.dtcs, issue.liveReadings)
+            }
+            Spacer(Modifier.height(16.dp))
+            BottomTabBar(selected = "Home")
         }
-        Spacer(Modifier.height(16.dp))
-        BottomTabBar(selected = "Home")
-    }
-}
-
-@Composable
-private fun TopBar(onBack: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "← Back",
-            modifier = Modifier.clickable(onClick = onBack),
-            style = MaterialTheme.typography.labelLarge,
-            color = Color(0xFF8FB9FF),
-        )
-        Text("Issue", color = Color(0xFFE6E8EE))
     }
 }
 
