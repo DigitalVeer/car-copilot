@@ -1,0 +1,19 @@
+{
+  "captured_at": "2026-05-14T19:42:11Z",
+  "vehicle": {
+    "year": 2009,
+    "make": "Toyota",
+    "model": "Corolla",
+    "mileage": 187000,
+    "display_name": "2009 Corolla"
+  },
+  "raw_dtcs": ["P0217", "P0301"],
+  "pending_dtcs": [],
+  "live_data": {
+    "coolant_temp_c": 110,
+    "rpm": 1800,
+    "fan_duty_pct": 100,
+    "ambient_temp_c": 28,
+    "vehicle_speed_kph": 35
+  }
+}

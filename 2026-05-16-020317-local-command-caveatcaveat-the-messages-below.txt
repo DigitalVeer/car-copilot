@@ -1,0 +1,637 @@
+ ▐▛███▜▌   Claude Code v2.1.143
+▝▜█████▛▘  Opus 4.7 · Claude Pro
+  ▘▘ ▝▝    ~/carcopilot
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ /model                                                                        
+  ⎿  Set model to Opus 4.7
+
+❯ /model                                                                        
+  ⎿  Set model to Opus 4.7 with xhigh effort
+
+❯ Read CLAUDE.md and carcopilot_design.md. Confirm you understand the project,  
+  then start Phase 1 from the design doc §14. Stop after Phase 1's acceptance   
+  criteria pass so I can review before Phase 2.                                 
+
+  Read 2 files (ctrl+o to expand)
+
+● I've read both documents. Let me confirm understanding and check the current
+  directory state.
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Project is empty except for design docs. I understand:
+
+  CAR·COPILOT = on-device car diagnostic assistant. Gemma handles voice; a
+  deterministic DTC table handles classification. Issue is the schema contract;
+  pipeline is offline; Gemma never classifies. Phase 1 = pure-Python core
+  (schema + DTC table + overrides + classifier + MockOBDSource + fixtures +
+  classifier tests). Acceptance is pytest tests/test_classifier.py green on
+  misfire/overheat/healthy fixtures, with classifications matching §11.1's CTA
+  decision table.
+
+  Let me check the environment, then build.
+
+● Bash(python3 --version && which pytest 2>/dev/null && python3 -c "import
+      pydantic; print('pydantic', pydantic.VERSION)" 2>&1 | head -5)
+  ⎿  Error: Exit code 1
+     Python 3.10.12
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Bash(apt list --installed 2>/dev/null | grep -i python3.1 ; command -v pyenv
+      conda uv pipx 2>&1; ls /usr/local/bin/python* 2>&1)
+  ⎿  Error: Exit code 2
+     libpython3.10-minimal/jammy-updates,jammy-security,now 3.10.12-1~22.04.15 
+     amd64 [installed,automatic]
+     libpython3.10-stdlib/jammy-updates,jammy-security,now 3.10.12-1~22.04.15 
+     amd64 [installed,automatic]
+     libpython3.10/jammy-updates,jammy-security,now 3.10.12-1~22.04.15 amd64 
+     [installed,automatic]
+     python3.10-minimal/jammy-updates,jammy-security,now 3.10.12-1~22.04.15 
+     amd64 [installed,automatic]
+     python3.10/jammy-updates,jammy-security,now 3.10.12-1~22.04.15 amd64 
+     [installed,automatic]
+     ls: cannot access '/usr/local/bin/python*': No such file or directory
+
+● Only Python 3.10 is here; spec requires 3.11+. Let me try installing 3.11 via
+  apt.
+
+● Bash(apt-cache policy python3.11 2>&1 | head -5; apt-cache search
+      '^python3\.1[1-3]$' 2>&1)
+  ⎿  python3.11:
+       Installed: (none)
+       Candidate: 3.11.0~rc1-1~22.04
+     … +4 lines (ctrl+o to expand)
+
+● Bash(DEBIAN_FRONTEND=noninteractive apt-get install -y python3.11
+      python3.11-venv python3.11-distutils 2>&1 | tail -10)
+  ⎿  Running in the background (↓ to manage)
+● Background command "Install Python 3.11" completed (exit code 0)
+
+● Bash(python3.11 --version && python3.11 -m ensurepip --upgrade 2>&1 | tail -3
+      && python3.11 -m pip --version 2>&1 | head -1)
+  ⎿  Python 3.11.0rc1
+     module, so use it on your own risk, or make sure to only use it in vir
+     tual
+     … +3 lines (ctrl+o to expand)
+
+● Bash(apt-get install -y python3-pip 2>&1 | tail -3 && python3.11 -m venv
+      /root/carcopilot/.venv && /root/carcopilot/.venv/bin/python --version &&
+      /root/carcopilot/.v…)
+  ⎿  Setting up python3-dev (3.10.6-1~22.04.1) ...
+     Processing triggers for man-db (2.10.2-1) ...
+     Processing triggers for libc-bin (2.35-0ubuntu3.13) ...
+     … +3 lines (ctrl+o to expand)
+
+● Python 3.11 venv ready. Now I'll build the Phase 1 files.
+
+● Write(pyproject.toml)
+  ⎿  Wrote 40 lines to pyproject.toml
+       2 requires = ["hatchling"]
+       3 build-backend = "hatchling.build"
+       4 
+       5 [project]
+       6 name = "carcopilot"
+       7 version = "0.1.0"
+       8 description = "On-device car diagnostic assistant powered by Gem
+         ma 4."
+       9 requires-python = ">=3.11"
+      10 dependencies = [
+     … +31 lines (ctrl+o to expand)
+
+● Write(Dockerfile)
+  ⎿  Wrote 15 lines to Dockerfile
+       2 FROM python:3.11-slim
+       3 WORKDIR /app
+       4 
+       5 RUN apt-get update && apt-get install -y --no-install-recommends
+          \
+       6     curl \
+       7     && rm -rf /var/lib/apt/lists/*
+       8 
+       9 COPY pyproject.toml ./
+      10 COPY src ./src
+     … +5 lines (ctrl+o to expand)
+
+● Write(docker-compose.yml)
+  ⎿  Wrote 28 lines to docker-compose.yml
+       2   ollama:
+       3     image: ollama/ollama:latest
+       4     ports:
+       5       - "11434:11434"
+       6     volumes:
+       7       - ollama-data:/root/.ollama
+       8     healthcheck:
+       9       test: ["CMD", "curl", "-f", "http://localhost:11434/api/ta
+         gs"]
+      10       interval: 10s
+     … +18 lines (ctrl+o to expand)
+
+● Write(.env.example)
+  ⎿  Wrote 6 lines to .env.example
+      1 OLLAMA_HOST=http://localhost:11434
+      2 GEMMA_MODEL=gemma3:4b
+      3 GEMMA_TIMEOUT_S=30
+      4 GEMMA_MAX_RETRIES=2
+      5 LOG_LEVEL=INFO
+      6 HISTORY_PATH=data/history.jsonl
+
+● Write(.gitignore)
+  ⎿  Wrote 13 lines to .gitignore
+       1 __pycache__/
+       2 *.py[cod]
+       3 *.egg-info/
+       4 .venv/
+       5 .pytest_cache/
+       6 .ruff_cache/
+       7 .mypy_cache/
+       8 .coverage
+       9 htmlcov/
+      10 build/
+     … +3 lines (ctrl+o to expand)
+
+● Write(src/carcopilot/__init__.py)
+  ⎿  Wrote 3 lines to src/carcopilot/__init__.py
+      1 """CAR·COPILOT — on-device car diagnostic assistant."""
+      2 
+      3 __version__ = "0.1.0"
+
+● Write(tests/__init__.py)
+  ⎿  Wrote 1 lines to tests/__init__.py
+      1 (No content)
+
+● Write(tests/fixtures/__init__.py)
+  ⎿  Wrote 1 lines to tests/fixtures/__init__.py
+      1 (No content)
+
+● Write(src/carcopilot/schema.py)
+  ⎿  Wrote 144 lines to src/carcopilot/schema.py
+       2 """Core schema for CAR·COPILOT.
+       3 The `Issue` type is the central UI contract. The classifier prod
+         uces the
+         s. Everyistic fields; the Gemma adapter fills the generative one
+       5 screen in the mockup is a render of an `Issue` (or a list of the
+         m).
+       7 """
+       8 from __future__ import annotations
+       9 
+      10 import json
+     … +139 lines (ctrl+o to expand)
+● Write(src/carcopilot/dtc_table.py)
+  ⎿  Wrote 261 lines to src/carcopilot/dtc_table.py
+        ity/route/cost/time.— the deterministic source of truth for sever
+      2 
+      3 Gemma never sees this. The classifier reads it; the fallback writ
+      4 Adding a new DTC means appending an entry here — no other code ch
+        ange required.
+      5 
+        misfires.plates may include ``{cylinder}`` for cylinder-specific 
+      7 """
+      8 
+      9 from __future__ import annotations
+     … +285 lines (ctrl+o to expand)
+
+● Update(src/carcopilot/dtc_table.py)
+  ⎿  Removed 3 lines
+      193      "P0480": DTCEntry(
+      194          code="P0480",
+      195          category="cooling_fan",
+      196 -        title_function_template=None                          
+      197 -        if False                                              
+      198 -        else None,  # placeholder; unused                     
+      196          title_template="Cooling fan circuit problem",
+      197          subtitle_template="The fan may not kick on in traffic.
+            Watch your temperature gauge.",
+      198          description="Cooling fan 1 control circuit malfunction
+           ",
+
+● Write(src/carcopilot/overrides.py)
+  ⎿  Wrote 107 lines to src/carcopilot/overrides.py
+       2 """Severity overrides driven by live data (not DTCs).
+       3 A live-data condition like "coolant temperature > 105°C" takes p
+         riority over any
+       4 trouble code — the car is overheating right now, regardless of w
+         hat's stored in
+       6 """ory. These rules run before the DTC lookup in the classifier.
+       7 
+       8 from __future__ import annotations
+       9 
+      10 from collections.abc import Callable
+     … +107 lines (ctrl+o to expand)
+
+● Write(src/carcopilot/classifier.py)
+  ⎿  Wrote 133 lines to src/carcopilot/classifier.py
+         on].eterministic classification: OBDSnapshot → list[Classificati
+       2 
+       3 This file owns structure. Gemma owns voice. The two are delibera
+       4 so that a Gemma failure can never produce a wrong severity or ro
+         ute — only a
+       5 less-friendly synthesis.
+       7 """
+       8 from __future__ import annotations
+       9 
+      10 from .dtc_table import DTC_TABLE, DTCEntry
+     … +135 lines (ctrl+o to expand)
+
+● Write(src/carcopilot/obd_source.py)
+  ⎿  Wrote 37 lines to src/carcopilot/obd_source.py
+       2 """OBD source abstraction. Phase 1 ships MockOBDSource only.
+       3 The real python-OBD wrapper lands in a later phase; the interfac
+         e here is what
+       4 both implementations honor so the rest of the app stays source-a
+         gnostic.
+       6 """
+       7 from __future__ import annotations
+       8 
+       9 from abc import ABC, abstractmethod
+      10 from pathlib import Path
+     … +30 lines (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ /permissions 
+  ⎿  Permissions dialog dismissed
+
+❯ Continue.                                                                     
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+● Continuing with fixtures.
+
+● Write(tests/fixtures/obd_snapshots/misfire.json)
+  ⎿  Wrote 20 lines to tests/fixtures/obd_snapshots/misfire.json
+       1 {
+       2   "captured_at": "2026-05-14T19:42:11Z",
+       3   "vehicle": {
+       4     "year": 2009,
+       5     "make": "Toyota",
+       6     "model": "Corolla",
+       7     "mileage": 187000,
+       8     "display_name": "2009 Corolla"
+       9   },
+      10   "raw_dtcs": ["P0301"],
+     … +10 lines (ctrl+o to expand)
+
+● Write(tests/fixtures/obd_snapshots/overheat.json)
+  ⎿  Wrote 19 lines to tests/fixtures/obd_snapshots/overheat.json
+       1 {
+       2   "captured_at": "2026-05-14T19:42:11Z",
+       3   "vehicle": {
+       4     "year": 2009,
+       5     "make": "Toyota",
+       6     "model": "Corolla",
+       7     "mileage": 187000,
+       8     "display_name": "2009 Corolla"
+       9   },
+      10   "raw_dtcs": ["P0217", "P0301"],
+     … +9 lines (ctrl+o to expand)
+
+● Write(tests/fixtures/obd_snapshots/healthy.json)
+  ⎿  Wrote 18 lines to tests/fixtures/obd_snapshots/healthy.json
+       1 {
+       2   "captured_at": "2026-05-14T19:42:11Z",
+       3   "vehicle": {
+       4     "year": 2009,
+       5     "make": "Toyota",
+       6     "model": "Corolla",
+       7     "mileage": 187000,
+       8     "display_name": "2009 Corolla"
+       9   },
+      10   "raw_dtcs": [],
+     … +8 lines (ctrl+o to expand)
+
+● Write(tests/test_classifier.py)
+  ⎿  Wrote 224 lines to tests/test_classifier.py
+       2 """Classifier tests — phase 1 acceptance gate.
+       3 These tests must be 100% deterministic. No Gemma, no I/O beyond 
+       4 JSON. Every fixture in tests/fixtures/obd_snapshots/ has at leas
+         t one test here.
+       6 Coverage:
+       7 - The three demo fixtures (misfire, overheat, healthy).
+         tion producedision table from design doc §11.1: every classifica
+       9   must map to one of the four valid (severity, route) UI variant
+      10 - Edge cases: unknown DTC, low-battery override, severe override
+          absorbing
+     … +243 lines (ctrl+o to expand)
+
+● Bash(.venv/bin/pip install -e ".[dev]" 2>&1 | tail -15)
+  ⎿    Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 59.8 MB/s eta
+      0:00:00
+     … +22 lines (ctrl+o to expand)
+
+● Bash(.venv/bin/pytest tests/test_classifier.py -v 2>&1 | tail -50)
+  ⎿  ============================= test session starts ====================
+     ==========
+     platform linux -- Python 3.11.0rc1, pytest-9.0.3, pluggy-1.6.0 -- /roo
+     … +26 lines (ctrl+o to expand)
+
+● All 16 tests pass. Let me also lint to catch anything sloppy.
+
+● Bash(.venv/bin/ruff check src/ tests/ 2>&1 | tail -20)
+  ⎿     |                    ^^^^^^^
+     19 |
+     20 | import pytest
+     … +17 lines (ctrl+o to expand)
+
+● Bash(.venv/bin/ruff check src/ tests/ 2>&1 | head -20)
+  ⎿  E501 Line too long (101 > 100)
+        --> src/carcopilot/dtc_table.py:215:101
+         |
+     … +19 lines (ctrl+o to expand)
+
+● Update(src/carcopilot/dtc_table.py)
+  ⎿  Added 3 lines, removed 1 line
+      212          code="P0700",
+      213          category="transmission",
+      214          title_template="Transmission needs a closer look",
+      215 -        subtitle_template="The transmission computer flagged a
+          - problem. Drive gently until checked.",                       
+      215 +        subtitle_template=(                                   
+      216 +            "The transmission computer flagged a problem. Driv
+          +e gently until checked."                                      
+      217 +        ),                                                    
+      218          description="Transmission control system malfunction",
+      219          severity="warning",
+      220          route="expert",
+
+● Update(tests/test_classifier.py)
+  ⎿  Added 1 line, removed 2 lines
+      13  
+      14  from __future__ import annotations
+      15  
+      16 -from datetime import datetime, timezone                        
+      16 +from datetime import UTC, datetime                             
+      17  from pathlib import Path
+      18 -from typing import Literal                                     
+      18  
+      19  import pytest
+      20  
+
+● Update(tests/test_classifier.py)
+  ⎿  Added 1 line, removed 1 line
+      59      live_data: dict[str, float | str] | None = None,
+      60  ) -> OBDSnapshot:
+      61      return OBDSnapshot(
+      62 -        captured_at=datetime(2026, 5, 14, tzinfo=timezone.utc),
+      62 +        captured_at=datetime(2026, 5, 14, tzinfo=UTC),         
+      63          vehicle=DEMO_VEHICLE,
+      64          raw_dtcs=raw_dtcs or [],
+      65          live_data=live_data or {},
+
+● Bash(.venv/bin/ruff check src/ tests/ && .venv/bin/pytest
+      tests/test_classifier.py -q 2>&1 | tail -10)
+  ⎿  All checks passed!
+     ................
+        [100%]
+     16 passed in 0.12s
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Phase 1 is done and clean — pausing here per CLAUDE.md before starting Phase
+  2. Summary for your review:
+
+  Files
+  - Scaffold: pyproject.toml, Dockerfile, docker-compose.yml, .env.example,
+  .gitignore
+  - Core: src/carcopilot/{schema,dtc_table,overrides,classifier,obd_source}.py
+  - Fixtures: tests/fixtures/obd_snapshots/{misfire,overheat,healthy}.json
+  - Tests: tests/test_classifier.py — 16 tests, all pass; ruff clean
+
+  Design decisions worth flagging
+  1. OverrideRule uses pydantic, not stdlib @dataclass as the design doc shows
+  (§5.2). CLAUDE.md says "Pydantic v2 for all schema. No stdlib dataclasses." —
+  I followed CLAUDE.md and used BaseModel with arbitrary_types_allowed=True to
+  support the Callable field. Easy to flip back if you'd rather match the doc
+  literally.
+  2. Severe override absorbs every raw DTC into deferred_dtcs (incl. P0217 in
+  the overheat fixture, not just P0301). Spec said "all other DTCs become
+  deferred"; I read "other" as "other than the override itself" which has no
+  DTC, so I deferred them all. Test asserts P0301 ∈ deferred per §13.1; P0217 is
+   along for the ride.
+  3. Healthy classification gets route="diy" as a filler since the schema
+  requires a route. UI treats healthy specially (no CTA) so the value doesn't
+  matter, but it's a placeholder choice worth knowing about.
+  4. One classification per DTC, no category grouping yet. §5.3 mentions "group
+  DTCs by category" — I kept it 1:1 for Phase 1 since none of the fixtures
+  trigger grouping. contributing_dtcs is in the schema waiting for it.
+  5. Python 3.11 install: WSL only had 3.10. I installed python3.11 via apt and
+  built a .venv at /root/carcopilot/.venv. The Dockerfile uses python:3.11-slim
+  as specified.
+
+  Acceptance
+  .venv/bin/pytest tests/test_classifier.py
+  16 passed in 0.12s
+
+  All three fixtures classify correctly and every (severity, route) pair maps to
+   a valid row in the §11.1 CTA decision table (tested explicitly in
+  test_every_classification_has_a_valid_cta_row).
+
+  Ready for your review before Phase 2 (Gemma adapter + prompts + fallback +
+  pipeline + demo scripts). Want me to commit Phase 1 now, or wait for any
+  changes?
+✻ Brewed for 2m 3s
+
+❯ Before we commit Phase 1, two adjustments per review:                         
+  1. Fix override consolidation (Decision 2). Add a category: str field to      
+  OverrideRule. In the classifier, when an override fires, split                
+  snapshot.raw_dtcs into:                                                       
+                                                                                
+  DTCs whose DTC_TABLE entry has the same category as the override →            
+  contributing_dtcs                                                             
+  DTCs of other categories → deferred_dtcs                                      
+                                                                                
+  For the overheat fixture: P0217 (category overheat) should end up in          
+  contributing_dtcs; P0301 (category misfire) should end up in deferred_dtcs.   
+  Update the corresponding test to assert this.                                 
+  2. Add "none" to the Route literal and use it for healthy classifications     
+  (Decision 3). Cleaner JSON than "diy" as filler. Update the CTA decision      
+  table test to expect "none" for healthy.                                      
+  After both: re-run pytest tests/test_classifier.py, paste the result, and     
+  we'll commit.                                                                 
+
+● Quick check — OverrideRule already has a category: str field, so I just need
+  to use it. Two edits:
+
+  1. classifier: when an override fires, partition raw_dtcs by whether their
+  DTC_TABLE category matches the override's category.
+  2. schema: add "none" to Route and use it for healthy.
+
+● Update(src/carcopilot/schema.py)
+  ⎿  Added 1 line, removed 1 line
+      15  from pydantic import BaseModel, ConfigDict, Field
+      16  
+      17  Severity = Literal["healthy", "warning", "severe"]
+      18 -Route = Literal["diy", "expert", "safety"]                     
+      18 +Route = Literal["diy", "expert", "safety", "none"]             
+      19  Difficulty = Literal["easy", "moderate", "hard"]
+      20  LiveStatus = Literal["normal", "warning", "severe"]
+      21  ResolutionState = Literal["open", "in_progress", "resolved", "i
+          gnored"]
+
+● Update(src/carcopilot/classifier.py)
+  ⎿  Added 6 lines, removed 1 line
+      33          if not rule.condition(snapshot.live_data):
+      34              continue
+      35          if rule.severity == "severe" and not severe_override_fi
+          red:
+      36 +            contributing, deferred = _split_dtcs_by_category(sn
+         +apshot.raw_dtcs, rule.category)                                
+      37              classifications.append(
+      37 -                _classification_from_override(rule, deferred_dt
+         -cs=list(snapshot.raw_dtcs))                                    
+      38 +                _classification_from_override(                 
+      39 +                    rule,                                      
+      40 +                    contributing_dtcs=contributing,            
+      41 +                    deferred_dtcs=deferred,                    
+      42 +                )                                              
+      43              )
+      44              severe_override_fired = True
+      45          else:
+
+● Update(src/carcopilot/classifier.py)
+  ⎿  Added 22 lines, removed 1 line
+      84  
+      85  def _classification_from_override(
+      86      rule: OverrideRule,
+      87 +    contributing_dtcs: list[str] | None = None,                
+      88      deferred_dtcs: list[str] | None = None,
+      89  ) -> Classification:
+      90      return Classification(
+     ...
+       95          subtitle=rule.subtitle,
+       96          meta=rule.meta,
+       97          primary_dtc=None,
+       97 -        contributing_dtcs=[],                                 
+       98 +        contributing_dtcs=contributing_dtcs or [],            
+       99          deferred_dtcs=deferred_dtcs or [],
+      100          fallback_synthesis=rule.fallback_synthesis,
+      101      )
+      102  
+      103  
+      104 +def _split_dtcs_by_category(                                  
+      105 +    codes: list[str], override_category: str                  
+      106 +) -> tuple[list[str], list[str]]:                             
+      107 +    """Split DTCs into (contributing, deferred) relative to a 
+          +fired override.                                               
+      108 +                                                              
+      109 +    A DTC contributes to the override when its DTC_TABLE categ
+          +ory matches —                                                 
+      110 +    those codes are evidence for the same problem the live-dat
+          +a rule caught.                                                
+      111 +    Anything else (or unknown codes) is deferred until the pri
+          +mary issue clears.                                            
+      112 +    """                                                       
+      113 +    contributing: list[str] = []                              
+      114 +    deferred: list[str] = []                                  
+      115 +    for code in codes:                                        
+      116 +        entry = DTC_TABLE.get(code)                           
+      117 +        if entry is not None and entry.category == override_ca
+          +tegory:                                                       
+      118 +            contributing.append(code)                         
+      119 +        else:                                                 
+      120 +            deferred.append(code)                             
+      121 +    return contributing, deferred                             
+      122 +                                                              
+      123 +                                                              
+      124  def _unknown_dtc_classification(code: str) -> Classification:
+      125      return Classification(
+      126          severity="warning",
+
+● Update(src/carcopilot/classifier.py)
+  ⎿  Added 1 line, removed 1 line
+      143  def _healthy_classification() -> Classification:
+      144      return Classification(
+      145          severity="healthy",
+      146 -        route="diy",                                          
+      146 +        route="none",                                         
+      147          category="healthy",
+      148          title="Everything checks out",
+      149          subtitle="No trouble codes. Live readings look normal.
+           ",
+
+● Now update the tests to assert the new behavior.
+
+● Update(tests/test_classifier.py)
+  ⎿  Added 1 line, removed 3 lines
+      35  # CTA decision table from design doc §11.1. The primary classif
+          ication's
+      36  # (severity, route) must be a key in this map.
+      37  CTA_FOR = {
+      38 -    ("healthy", "diy"): None,                                  
+      39 -    ("healthy", "expert"): None,                               
+      40 -    ("healthy", "safety"): None,                               
+      38 +    ("healthy", "none"): None,                                 
+      39      ("warning", "diy"): "Show me what's going on →",
+      40      ("warning", "expert"): "Show me what's going on →",
+      41      ("severe", "safety"): "Stop engine · walk me through it →",
+
+● Update(tests/test_classifier.py)
+  ⎿  Added 5 lines, removed 3 lines
+       95      assert primary.severity == "severe"
+       96      assert primary.route == "safety"
+       97      assert primary.category == "overheat"
+       98 -    # Severe override absorbs every raw DTC into deferred_dtcs
+          -.                                                             
+       99 -    assert "P0301" in primary.deferred_dtcs                   
+      100 -    assert "P0217" in primary.deferred_dtcs                   
+       98 +    # P0217 is in the "overheat" category — same as the overri
+          +de — so it                                                    
+       99 +    # contributes. P0301 is "misfire" — a different problem de
+          +ferred until                                                  
+      100 +    # the overheat clears.                                    
+      101 +    assert primary.contributing_dtcs == ["P0217"]             
+      102 +    assert primary.deferred_dtcs == ["P0301"]                 
+      103      assert home_cta(primary) == "Stop engine · walk me through
+            it →"
+      104      # No DTC classifications got through (severe override fire
+           d).
+      105      assert all(c.severity == "severe" for c in classifications
+           )
+
+● Bash(.venv/bin/ruff check src/ tests/ && .venv/bin/pytest
+      tests/test_classifier.py -v 2>&1 | tail -30)
+  ⎿  All checks passed!
+     ============================= test session starts ====================
+     ==========
+     … +27 lines (ctrl+o to expand)
+
+● Both adjustments in, ruff clean, 16/16 green.
+
+  Changes
+  - schema.py: Route = Literal["diy", "expert", "safety", "none"]
+  - classifier.py: new _split_dtcs_by_category(codes, override_category)
+  partitions raw DTCs against the firing override's category;
+  _classification_from_override now takes both contributing_dtcs and
+  deferred_dtcs; healthy classification routes to "none".
+  - tests/test_classifier.py: CTA_FOR drops the three ("healthy", *) filler rows
+   in favor of ("healthy", "none"); overheat test now asserts contributing_dtcs 
+  == ["P0217"] and deferred_dtcs == ["P0301"].
+
+  Note: OverrideRule.category already existed (used to populate
+  Classification.category); the classifier now reads it for the DTC split too.
+
+  Ready to commit Phase 1?
+
+✻ Cooked for 1m 6s
+
+※ recap: Building Phase 1 of CAR·COPILOT (deterministic Python core: schema, DTC table, classifier, MockOBDSource, fixtures, tests); all 16 classifier tests pass after your two review adjustments. Next: commit Phase 1 on your go-ahead. (disable recaps in /config)
+
+❯ Before committing, print the title field of the misfire fixture's             
+  classification and paste it back. I want to confirm it reads "Replace         
+  ignition coil — cylinder 1" and not "Replace ignition coil — cylinder         
+  {cylinder}".                                                                  
+  ⎿  ⧉ Selected 1 lines from src/carcopilot/schema.py in Visual Studio Code
+
+● Bash(.venv/bin/python -c "
+      from carcopilot.classifier import classify…)
+  ⎿  'Replace ignition coil — cylinder 1'
+
+● Title reads 'Replace ignition coil — cylinder 1' — fully substituted, no
+  {cylinder} placeholder. (The _misfire_entry helper in dtc_table.py bakes the
+  cylinder number in via f-string at table-build time, so the value stored in
+  title_template is already the final title for that DTC.)
+
+  Ready to commit Phase 1?
+
+✻ Cogitated for 8s
