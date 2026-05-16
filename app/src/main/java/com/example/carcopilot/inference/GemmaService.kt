@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onCompletion
 import java.io.File
 
@@ -85,7 +86,7 @@ class GemmaService(
         } finally {
             try { convo.close() } catch (_: Throwable) {}
         }
-    }.onCompletion { /* engine stays open for the process lifetime */ }
+    }.flowOn(Dispatchers.IO).onCompletion { /* engine stays open for the process lifetime */ }
 
     private fun stageModel(): File {
         val target = File(context.filesDir, MODEL_FILE)
