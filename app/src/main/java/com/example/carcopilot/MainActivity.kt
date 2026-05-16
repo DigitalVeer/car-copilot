@@ -7,10 +7,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.carcopilot.model.Fixtures
+import com.example.carcopilot.ui.HomeScreen
+import com.example.carcopilot.ui.IssueScreen
 import com.example.carcopilot.ui.theme.CarCopilotTheme
 
 class MainActivity : ComponentActivity() {
@@ -20,28 +25,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             CarCopilotTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    val ctx = LocalContext.current
+                    val gemma = (ctx.applicationContext as CarCopilotApp).gemma
+                    val misfire = remember { Fixtures.loadMisfireIssue(ctx) }
+                    val nav = rememberNavController()
+                    NavHost(
+                        navController = nav,
+                        startDestination = "home",
+                        modifier = Modifier.padding(innerPadding),
+                    ) {
+                        composable("home") {
+                            HomeScreen(misfire = misfire, onIssueClick = { nav.navigate("issue") })
+                        }
+                        composable("issue") {
+                            IssueScreen(issue = misfire, gemma = gemma, onBack = { nav.popBackStack() })
+                        }
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    CarCopilotTheme {
-        Greeting("Android")
     }
 }
