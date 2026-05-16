@@ -41,6 +41,7 @@ fun IssueScreen(
     onBack: () -> Unit,
     onWalkthrough: () -> Unit = {},
     onMechanicDraft: () -> Unit = {},
+    onHistoryTab: () -> Unit = {},
 ) {
     var state by remember { mutableStateOf<SynthesisState>(SynthesisState.Thinking) }
     var evidenceOpen by remember { mutableStateOf(false) }
@@ -117,6 +118,14 @@ fun IssueScreen(
                 EvidenceSection(dtcs = issue.dtcs, readings = issue.liveReadings)
             }
         }
-        BottomTabBar(selected = Tab.Home)
+        BottomTabBar(
+            selected = Tab.Home,
+            onSelect = { tab ->
+                when (tab) {
+                    Tab.Home -> Unit
+                    Tab.History -> onHistoryTab()
+                }
+            },
+        )
     }
 }

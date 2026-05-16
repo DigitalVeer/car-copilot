@@ -14,6 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.carcopilot.model.Fixtures
+import com.example.carcopilot.ui.HistoryScreen
 import com.example.carcopilot.ui.HomeScreen
 import com.example.carcopilot.ui.IssueScreen
 import com.example.carcopilot.ui.MechanicDraftScreen
@@ -31,13 +32,23 @@ class MainActivity : ComponentActivity() {
                     val gemma = (ctx.applicationContext as CarCopilotApp).gemma
                     val misfire = remember { Fixtures.loadMisfireIssue(ctx) }
                     val nav = rememberNavController()
+                    val toHistory: () -> Unit = {
+                        nav.navigate("history") { launchSingleTop = true }
+                    }
+                    val toHome: () -> Unit = {
+                        nav.popBackStack(route = "home", inclusive = false)
+                    }
                     NavHost(
                         navController = nav,
                         startDestination = "home",
                         modifier = Modifier.padding(innerPadding),
                     ) {
                         composable("home") {
-                            HomeScreen(misfire = misfire, onIssueClick = { nav.navigate("issue") })
+                            HomeScreen(
+                                misfire = misfire,
+                                onIssueClick = { nav.navigate("issue") },
+                                onHistoryTab = toHistory,
+                            )
                         }
                         composable("issue") {
                             IssueScreen(
@@ -46,29 +57,30 @@ class MainActivity : ComponentActivity() {
                                 onBack = { nav.popBackStack() },
                                 onWalkthrough = { nav.navigate("walkthrough") },
                                 onMechanicDraft = { nav.navigate("draft") },
+                                onHistoryTab = toHistory,
                             )
                         }
                         composable("walkthrough") {
                             WalkthroughScreen(
                                 issue = misfire,
                                 onBack = { nav.popBackStack() },
-                                onFinish = {
-                                    nav.popBackStack(route = "home", inclusive = false)
-                                },
-                                onHomeTab = {
-                                    nav.popBackStack(route = "home", inclusive = false)
-                                },
-                                onHistoryTab = { /* Phase 7C will wire this */ },
+                                onFinish = toHome,
+                                onHomeTab = toHome,
+                                onHistoryTab = toHistory,
                             )
                         }
                         composable("draft") {
                             MechanicDraftScreen(
                                 issue = misfire,
                                 onBack = { nav.popBackStack() },
-                                onHomeTab = {
-                                    nav.popBackStack(route = "home", inclusive = false)
-                                },
-                                onHistoryTab = { /* Phase 7C will wire this */ },
+                                onHomeTab = toHome,
+                                onHistoryTab = toHistory,
+                            )
+                        }
+                        composable("history") {
+                            HistoryScreen(
+                                onHomeTab = toHome,
+                                onBack = { nav.popBackStack() },
                             )
                         }
                     }

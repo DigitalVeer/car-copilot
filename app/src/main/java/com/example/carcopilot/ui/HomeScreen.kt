@@ -34,7 +34,11 @@ import kotlinx.coroutines.delay
  * Issue card is tappable and navigates to Issue page.
  */
 @Composable
-fun HomeScreen(misfire: Issue, onIssueClick: () -> Unit) {
+fun HomeScreen(
+    misfire: Issue,
+    onIssueClick: () -> Unit,
+    onHistoryTab: () -> Unit = {},
+) {
     var state by remember {
         mutableStateOf<SynthesisState>(SynthesisState.Thinking)
     }
@@ -76,6 +80,14 @@ fun HomeScreen(misfire: Issue, onIssueClick: () -> Unit) {
                 ),
             )
         }
-        BottomTabBar(selected = Tab.Home)
+        BottomTabBar(
+            selected = Tab.Home,
+            onSelect = { tab ->
+                when (tab) {
+                    Tab.Home -> Unit
+                    Tab.History -> onHistoryTab()
+                }
+            },
+        )
     }
 }
