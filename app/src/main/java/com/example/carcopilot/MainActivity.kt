@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.carcopilot.model.Fixtures
 import com.example.carcopilot.ui.HomeScreen
 import com.example.carcopilot.ui.IssueScreen
+import com.example.carcopilot.ui.MechanicDraftScreen
 import com.example.carcopilot.ui.WalkthroughScreen
 import com.example.carcopilot.ui.theme.CarCopilotTheme
 
@@ -44,6 +45,7 @@ class MainActivity : ComponentActivity() {
                                 gemma = gemma,
                                 onBack = { nav.popBackStack() },
                                 onWalkthrough = { nav.navigate("walkthrough") },
+                                onMechanicDraft = { nav.navigate("draft") },
                             )
                         }
                         composable("walkthrough") {
@@ -53,6 +55,16 @@ class MainActivity : ComponentActivity() {
                                 onFinish = {
                                     nav.popBackStack(route = "home", inclusive = false)
                                 },
+                                onHomeTab = {
+                                    nav.popBackStack(route = "home", inclusive = false)
+                                },
+                                onHistoryTab = { /* Phase 7C will wire this */ },
+                            )
+                        }
+                        composable("draft") {
+                            MechanicDraftScreen(
+                                issue = misfire,
+                                onBack = { nav.popBackStack() },
                                 onHomeTab = {
                                     nav.popBackStack(route = "home", inclusive = false)
                                 },

@@ -40,6 +40,7 @@ fun IssueScreen(
     gemma: GemmaService,
     onBack: () -> Unit,
     onWalkthrough: () -> Unit = {},
+    onMechanicDraft: () -> Unit = {},
 ) {
     var state by remember { mutableStateOf<SynthesisState>(SynthesisState.Thinking) }
     var evidenceOpen by remember { mutableStateOf(false) }
@@ -103,6 +104,7 @@ fun IssueScreen(
                 primaryLabel = "Walk me through the fix →",
                 ghostLabel = "Send this to a mechanic instead",
                 onPrimary = onWalkthrough,
+                onGhost = onMechanicDraft,
             )
             EvidenceToggle(open = evidenceOpen, onClick = { evidenceOpen = !evidenceOpen })
             AnimatedVisibility(
