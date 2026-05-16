@@ -55,11 +55,18 @@ The home card's CTA tap navigates to IssueScreen via a NavController. No other n
 
 - **Language:** Kotlin
 - **UI:** Jetpack Compose. Single-Activity app with a NavController routing between HomeScreen and IssueScreen. No WebView.
-- **LLM runtime:** LiteRT-LM (formerly MediaPipe LLM Inference) for Android. The SDK is still under the `com.google.mediapipe.tasks.genai` namespace; LiteRT-LM is Google's rebrand of the framework for Gemma 4 deployment.
-- **Model:** Gemma 4 in `.task` format. Try E4B first for consistency with the voice-tuned prompts (which were tuned against `gemma4:e4b` on Ollama). Fall back to E2B (`gemma-4-E2B-it-web.task`, ~1.93 GB) if E4B runs out of memory or is too slow on the target device.
+- **LLM runtime:** LiteRT-LM (the rebrand of MediaPipe LLM Inference for the Gemma 4 generation). Gradle dependency `com.google.ai.edge.litertlm:litertlm-android:0.11.0`. Package `com.google.ai.edge.litertlm.*` — classes `Engine`, `EngineConfig`, `Backend`, `Conversation`, `ConversationConfig`, `SamplerConfig`, `Message`, `Contents`. **Note:** earlier drafts of this spec said the SDK was still under `com.google.mediapipe.tasks.genai` — that namespace exists but is being deprecated. Use the LiteRT-LM artifact above.
+- **Model:** Gemma 4 in `.litertlm` format (the Android/iOS/desktop build). The `.task` files in the same Hugging Face repos are the **web** build and will not load via the Android SDK. E4B (`gemma-4-E4B-it.litertlm`, ~3.41 GB) is the consistency target — tuned against `gemma4:e4b` on Ollama in Phase 2. Fall back to E2B if E4B is too slow on the target device.
+- **Manifest requirements:** the GPU backend needs the app to declare optional vendor libraries via `<uses-native-library>` inside `<application>`:
+  ```xml
+  <uses-native-library android:name="libvndksupport.so" android:required="false"/>
+  <uses-native-library android:name="libOpenCL.so" android:required="false"/>
+  ```
+  Without these, OpenCL fails to dlopen on Android 12+ and the runtime falls back to OpenGL (slower) or fails outright. Confirmed on Pixel 9 (Mali-G715) — with the declarations, OpenCL loads cleanly.
+- **Model staging:** the GPU delegate writes a sidecar weights cache next to the model file. `/data/local/tmp/` is not writable by the app's UID, so the model must live in the app's private `context.filesDir` (or a subdirectory) before `Engine.initialize()`. Either download directly into `filesDir`, or stage from `/data/local/tmp/` on first run with a size-match check.
 - **Why not AICore:** AICore's ML Kit Prompt API does not support structured JSON output as of the current Developer Preview. Per recent engineering case studies, models routed through AICore "frequently add markdown code fences, mix natural language with JSON, or translate JSON keys" because AICore exposes no sampler configuration. LiteRT-LM gives us the sampler + prompting control needed to enforce schema adherence.
 - **Min SDK:** 26 (Android 8.0). Pixel 9 is on Android 14+.
-- **Architecture:** Activity → ComposeNavHost → HomeScreen (Compose) → tap card → IssueScreen (Compose) → `LaunchedEffect` triggers `GemmaService.generateSynthesis()` coroutine → LiteRT-LM inference → state hoisted back into Compose, text fades into AI strip.
+- **Architecture:** Activity → ComposeNavHost → HomeScreen (Compose) → tap card → IssueScreen (Compose) → `LaunchedEffect` collects a `Flow<String>` from `GemmaService.streamSynthesis()` → each delta appends to the running text → on flow completion, parse the assembled JSON → state hoisted back into Compose, text appears live in the AI strip.
 
 ## 5. Go/no-go checkpoints
 
@@ -69,8 +76,8 @@ Model availability is confirmed: Gemma 4 E2B and E4B are both packaged as `.task
 
 Steps:
 
-1. Download the `.task` file. Try E4B first (consistency with the Ollama-tuned prompts); if memory or speed is bad, drop to E2B (`gemma-4-E2B-it-web.task`, ~1.93 GB, confirmed available in litert-community).
-2. Write a 30-line standalone Android sample that loads the model via LiteRT-LM and runs **the actual `issue_synthesis.md` prompt** filled with the misfire fixture's data. Don't just test "any prompt works" — test the one we'll ship.
+1. Download the `.litertlm` file from `litert-community` on Hugging Face. Try E4B first (consistency with the Ollama-tuned prompts) — `gemma-4-E4B-it.litertlm` is ~3.41 GB. The repo also has a `gemma-4-E4B-it-web.task` (~2.96 GB) but that's the **web** build — do not download it for Android use.
+2. Write a 30-line standalone Android sample (an instrumented test is fine — it isolates the smoke path from the production app code) that loads the model via LiteRT-LM and runs **the actual `issue_synthesis.md` prompt** filled with the misfire fixture's data. Don't just test "any prompt works" — test the one we'll ship.
 3. Verify two things from the output:
    - **JSON parses cleanly.** No markdown fences, no leading prose, no key renaming. If parse fails, this is the gotcha the arXiv paper warned about — adjust the prompt to be more explicit about JSON-only output, lower temperature, set top-k conservatively.
    - **Synthesis matches the voice we tuned.** Compare the on-device output against the Ollama output you committed in Phase 2's voice tuning pass 3. They should read similarly. If the on-device version regresses noticeably (more clinical, more verbose, code-leakage returning), the prompts may need a light pass specifically for the LiteRT-LM runtime — different sampler defaults can shift output character even with the same prompt.
@@ -126,38 +133,54 @@ Fallback at any checkpoint failure:
 
 ## 7. Compose invocation pattern
 
-The Gemma call lives in `GemmaService` and is invoked from the IssueScreen composable via `LaunchedEffect`. Skeleton:
+The Gemma call lives in `GemmaService` and streams via `sendMessageAsync` — verified in Checkpoint A to emit per-token deltas (each `Message` is new text, not cumulative). Compose code must append. Steady-state ~5 tok/s after ~6s first-token latency on Pixel 9.
 
 ```kotlin
-class GemmaService(private val llm: LlmInference) {
-  suspend fun generateSynthesis(issue: Issue): SynthesisResult = withContext(Dispatchers.IO) {
-    val prompt = buildPrompt(issue)  // concatenates system.md + issue_synthesis.md with issue data
-    val raw = try {
-      llm.generateResponse(prompt)
-    } catch (e: Exception) {
-      return@withContext SynthesisResult.Fallback(FALLBACK_SYNTHESIS_MISFIRE)
-    }
-    parseJsonTolerant(raw) ?: SynthesisResult.Fallback(FALLBACK_SYNTHESIS_MISFIRE)
+class GemmaService(private val engine: Engine, private val systemPrompt: String) {
+  /** Streams the assistant's response as token deltas. */
+  fun streamSynthesis(issue: Issue): Flow<String> {
+    val convo = engine.createConversation(
+      ConversationConfig(
+        systemInstruction = Contents.of(systemPrompt),
+        samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.3),
+      )
+    )
+    val prompt = buildPrompt(issue)  // concatenates system.md context + issue_synthesis.md
+    return convo.sendMessageAsync(prompt)
+      .map { it.toString() }
+      .onCompletion { convo.close() }
   }
+}
+
+sealed interface SynthesisState {
+  data object Thinking : SynthesisState
+  data class Streaming(val partial: String) : SynthesisState
+  data class Ready(val synthesis: String, val goodNews: String?, val isFallback: Boolean) : SynthesisState
 }
 
 // In IssueScreen.kt:
 @Composable
 fun IssueScreen(issue: Issue, gemma: GemmaService) {
-  var synthesisState by remember { mutableStateOf<SynthesisState>(SynthesisState.Thinking) }
-  
+  var state by remember { mutableStateOf<SynthesisState>(SynthesisState.Thinking) }
   LaunchedEffect(issue.id) {
-    val result = gemma.generateSynthesis(issue)
-    synthesisState = SynthesisState.Ready(result.text, result.isFallback)
+    val buf = StringBuilder()
+    try {
+      gemma.streamSynthesis(issue).collect { delta ->
+        buf.append(delta)
+        state = SynthesisState.Streaming(buf.toString())
+      }
+      state = parseOrFallback(buf.toString(), issue)
+    } catch (e: Exception) {
+      state = SynthesisState.Ready(FALLBACK_SYNTHESIS_MISFIRE, null, isFallback = true)
+    }
   }
-  
-  // ... render AI strip based on synthesisState ...
+  AnimatedAIStrip(state)
 }
 ```
 
-If the LiteRT-LM call throws or the response can't be parsed as JSON, fall back to `FALLBACK_SYNTHESIS_MISFIRE` (the canned string ported from `fallback.py`). The composable should set `synthesisState = SynthesisState.Ready(fallbackText, isFallback=true)` and continue rendering normally — the demo never visibly breaks.
+If the LiteRT-LM call throws or the assembled response can't be parsed as JSON, fall back to `FALLBACK_SYNTHESIS_MISFIRE` (the canned string ported from `fallback.py`). The composable transitions to `SynthesisState.Ready(fallbackText, isFallback=true)` and continues rendering normally — the demo never visibly breaks.
 
-For JSON tolerance: strip ```json fences if present, strip leading non-JSON prose, retry parsing. If still failing, fall back. This mirrors the Python `gemma_adapter.py` retry/fallback strategy.
+For JSON tolerance: parse the **assembled** string after the flow completes, not the incremental partials. Strip ```json fences if present, strip leading non-JSON prose, locate the outermost `{...}` block, parse. If still failing, fall back. This mirrors the Python `gemma_adapter.py` retry/fallback strategy.
 
 ## 8. What's explicitly out of scope (don't build, don't promise)
 

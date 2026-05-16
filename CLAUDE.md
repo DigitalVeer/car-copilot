@@ -40,7 +40,15 @@ After Checkpoint A passes:
 - **Navigation:** Single Activity with Compose NavController. Two destinations for Phase 5: HomeScreen and IssueScreen.
 - **Fonts:** Bundle Geist and JetBrains Mono in `res/font/` and reference them via `FontFamily` in the theme. Both are open source.
 - **Theme:** Custom dark palette extracted from the mockup CSS variables (`--phone-bg`, `--phone-card`, `--accent`, `--severe`, `--healthy`, etc.). Material3 surfaces with overrides.
-- **LLM SDK:** `com.google.mediapipe.tasks.genai.llminference.LlmInference` (LiteRT-LM is the framework rebrand; the namespace is unchanged at SDK level).
+- **LLM SDK:** `com.google.ai.edge.litertlm:litertlm-android:0.11.0`. Package `com.google.ai.edge.litertlm.*` — classes `Engine`, `EngineConfig`, `Backend`, `Conversation`, `ConversationConfig`, `SamplerConfig`, `Message`, `Contents`. (This replaces the older `com.google.mediapipe.tasks.genai.llminference.LlmInference` path — that namespace still exists but is being deprecated for the LiteRT-LM rebrand.)
+- **Model format:** `.litertlm` (the Android/iOS/desktop build). The `.task` files in the same litert-community Hugging Face repos are the **web** build and will not load via the Android SDK. E4B = `gemma-4-E4B-it.litertlm`, ~3.41 GB.
+- **Manifest:** the GPU backend requires two `<uses-native-library>` entries inside `<application>` to dlopen the vendor OpenCL driver:
+  ```xml
+  <uses-native-library android:name="libvndksupport.so" android:required="false"/>
+  <uses-native-library android:name="libOpenCL.so" android:required="false"/>
+  ```
+- **Model staging:** the GPU delegate writes a sidecar weights cache next to the model file. `/data/local/tmp/` is not writable by the app's UID, so the model must live in `context.filesDir` (or a subdirectory) before `Engine.initialize()`. Either download directly into `filesDir`, or stage from `/data/local/tmp/` on first run with a size-match check.
+- **Streaming:** `Conversation.sendMessageAsync(String): Flow<Message>` emits **per-token deltas** (not cumulative running text — confirmed empirically in Checkpoint A). Compose collectors must append, never replace. Steady-state ~5 tok/s after ~6s first-token latency on Pixel 9. Parse the assembled JSON after the flow completes, not the incremental partials.
 - **Min SDK:** 26 (Android 8.0). Target SDK: current stable.
 - **Package:** `com.example.carcopilot` is fine for hackathon — do not rename, it's not worth the gradle churn.
 
@@ -112,7 +120,7 @@ If you find yourself writing canned fallback text that sounds like a developer w
 ## Checkpoint protocol
 
 **Checkpoint A: Gemma 4 loads on device and produces parseable JSON.**
-- Use the E4B `.task` file first (consistency with Python voice tuning). Fall back to E2B if E4B is too slow or memory-bound.
+- Use the E4B `.litertlm` file first (consistency with Python voice tuning). Fall back to E2B if E4B is too slow or memory-bound. Note: the `.task` files in the same Hugging Face repos are the web build and will not load on Android — use `.litertlm`.
 - Test with the actual `issue_synthesis.md` prompt + `misfire.json` data, not a stripped-down test prompt.
 - Report: model file used, raw output, JSON parses cleanly (yes/no), voice comparison vs. Python output, inference latency.
 - WAIT for user review before scaffolding.
