@@ -51,6 +51,17 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    testOptions {
+        unitTests {
+            // Stops android.util.Log and other framework stubs from throwing
+            // RuntimeException("Method ... not mocked") when JVM unit tests
+            // touch Android-namespaced code (e.g. SynthesisState.parseOrFallback
+            // calls Log.w on the fallback path). Without this, our extractor
+            // tests would either need to wrap Log in a wrapper interface or
+            // run as instrumented tests on a device — neither pays for itself.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
