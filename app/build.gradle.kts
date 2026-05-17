@@ -20,6 +20,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Phase 8 measurement harness: pick model at build time via -PmodelVariant=E2B
+        val modelVariant = (project.findProperty("modelVariant") as? String) ?: "E4B"
+        require(modelVariant == "E4B" || modelVariant == "E2B") {
+            "modelVariant must be E4B or E2B, got: $modelVariant"
+        }
+        buildConfigField("String", "MODEL_VARIANT", "\"$modelVariant\"")
     }
 
     buildTypes {
@@ -37,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {
