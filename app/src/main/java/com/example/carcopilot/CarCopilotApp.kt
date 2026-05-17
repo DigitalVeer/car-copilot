@@ -2,6 +2,7 @@ package com.example.carcopilot
 
 import android.app.Application
 import com.example.carcopilot.BuildConfig
+import com.example.carcopilot.data.BluetoothOBDDataSource
 import com.example.carcopilot.data.DTCTable
 import com.example.carcopilot.data.EngineFamily
 import com.example.carcopilot.data.FixtureOBDDataSource
@@ -42,6 +43,15 @@ class CarCopilotApp : Application() {
             "EMULATOR" -> TcpOBDDataSource(
                 host = BuildConfig.OBD_EMULATOR_HOST,
                 port = 35000,
+                vehicle = VehicleInfo(
+                    year = 2009, make = "Toyota", model = "Corolla",
+                    mileage = 187_000, displayName = "2009 Corolla",
+                ),
+                engineFamily = EngineFamily.PETROL,
+            )
+            "BLUETOOTH" -> BluetoothOBDDataSource(
+                context = this,
+                deviceName = BuildConfig.BT_DEVICE_NAME,
                 vehicle = VehicleInfo(
                     year = 2009, make = "Toyota", model = "Corolla",
                     mileage = 187_000, displayName = "2009 Corolla",

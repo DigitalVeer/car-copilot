@@ -4,6 +4,19 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Bluetooth Classic (SPP) for ELM327 dongle -->
+    <!-- API 31+: runtime permissions -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+        android:minSdkVersion="31" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:minSdkVersion="31"
+        tools:ignore="ScopedStorage" />
+    <!-- API < 31: legacy permissions -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
     <application
         android:name=".CarCopilotApp"
         android:allowBackup="true"

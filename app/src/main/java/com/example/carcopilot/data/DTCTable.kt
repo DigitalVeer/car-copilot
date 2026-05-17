@@ -142,6 +142,10 @@ I'm trying to keep costs down — happy to bring it in when you have time.""",
 I've sprayed the MAF sensor and checked the intake hose but the code keeps coming back. Could you check fuel pressure and look for any vacuum leaks I might have missed?
 
 Happy to bring it in at your convenience.""",
+                    tripReadiness = TripReadiness(
+                        headline = "Safe for short trips",
+                        caveat = "avoid extended highway driving until fixed",
+                    ),
                 ),
             )
         )
