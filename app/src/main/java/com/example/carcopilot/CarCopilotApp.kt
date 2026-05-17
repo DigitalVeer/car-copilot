@@ -32,7 +32,9 @@ class CarCopilotApp : Application() {
 
     lateinit var obd: OBDDataSource
         private set
-    lateinit var initialIssue: Issue
+    // Null when DATA_SOURCE=BLUETOOTH (snapshot is read async in SnapshotViewerScreen)
+    // or when the connected car has no active DTCs.
+    var initialIssue: Issue? = null
         private set
     lateinit var gemma: GemmaService
         private set
@@ -53,19 +55,23 @@ class CarCopilotApp : Application() {
                 context = this,
                 deviceName = BuildConfig.BT_DEVICE_NAME,
                 vehicle = VehicleInfo(
-                    year = 2009, make = "Toyota", model = "Corolla",
-                    mileage = 187_000, displayName = "2009 Corolla",
+                    year = 2021, make = "VW", model = "Jetta",
+                    mileage = 0, displayName = "2021 VW Jetta",
                 ),
                 engineFamily = EngineFamily.PETROL,
             )
             else -> FixtureOBDDataSource(this)
         }
-        // Synchronous snapshot on startup preserves the existing composition
-        // flow (HomeScreen takes a non-null Issue). Phase 12 BLE will replace
-        // this with an async scan UX driven off OBDDataSource.connectionState.
-        initialIssue = runBlocking {
-            val snapshot = obd.readSnapshot().getOrThrow()
-            IssueBuilder.build(snapshot, DTCTable.DEFAULT)
+        // Bluetooth skips the blocking read — SnapshotViewerScreen drives the
+        // async connect flow instead. Fixture and emulator read synchronously.
+        if (BuildConfig.DATA_SOURCE != "BLUETOOTH") {
+            initialIssue = runBlocking {
+                obd.readSnapshot().getOrNull()?.let { snapshot ->
+                    if (snapshot.dtcs.isNotEmpty())
+                        IssueBuilder.build(snapshot, DTCTable.DEFAULT)
+                    else null
+                }
+            }
         }
         gemma = GemmaService(this, appScope)
     }
