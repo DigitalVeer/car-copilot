@@ -16,13 +16,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.File
 
 // Phase 8 measurement harness — switch via -PmodelVariant=E2B at build time.
@@ -33,6 +36,15 @@ private val MODEL_FILE = when (BuildConfig.MODEL_VARIANT) {
 private val STAGED_PATH = "/data/local/tmp/$MODEL_FILE"
 private const val TAG = "GemmaService"
 private const val METRIC_TAG = "CarCopilot"
+
+/**
+ * Minimum gap between a Conversation.close() and the next createConversation
+ * on the same Engine. Empirically chosen to give LiteRT-LM 0.11.0's native
+ * cleanup time to complete before a new prefill kicks off; the SDK's
+ * close() returns to Kotlin before native teardown finishes. Tune up if the
+ * SIGSEGV still appears under rapid surface churn.
+ */
+private const val NATIVE_SETTLE_MS: Long = 250
 
 /**
  * Owns the LiteRT-LM Engine + a single Conversation slot tagged by surface.
@@ -62,6 +74,17 @@ class GemmaService(
     @Volatile private var conversation: Conversation? = null
     @Volatile private var currentSurface: String? = null
     private val convoMutex = Mutex()
+
+    /**
+     * Monotonic nanos of the most recent Conversation.close(). The next
+     * createConversation waits until at least [NATIVE_SETTLE_MS] have passed
+     * since this stamp — close() returns to Kotlin before LiteRT-LM 0.11.0
+     * finishes native-side teardown, and a follow-up RunPrefillAsync against
+     * the new Conversation can SIGSEGV inside liblitertlm_jni.so if the old
+     * one's cleanup is still in flight. See FUTURE_WORK "native instability
+     * on rapid surface churn" for the crash signature.
+     */
+    @Volatile private var lastCloseNs: Long = 0L
 
     /** Set to a non-null Throwable if engine init failed; callers fall back. */
     @Volatile var initError: Throwable? = null
@@ -165,10 +188,17 @@ class GemmaService(
             } catch (t: Throwable) {
                 failed = true
                 Log.w(TAG, "streamSynthesis collect: ${t.javaClass.simpleName}: ${t.message}")
-                // Reset hoisted Conversation — it may be in a bad state.
-                try { convo.close() } catch (_: Throwable) {}
-                conversation = null
-                currentSurface = null
+                // Reset hoisted Conversation — it may be in a bad state. Wrapped
+                // in NonCancellable so a propagating CancellationException can't
+                // skip cancelProcess/close/timestamp, and the next surface acquire
+                // can safely wait NATIVE_SETTLE_MS from lastCloseNs.
+                withContext(NonCancellable) {
+                    try { convo.cancelProcess() } catch (_: Throwable) {}
+                    try { convo.close() } catch (_: Throwable) {}
+                    conversation = null
+                    currentSurface = null
+                    lastCloseNs = System.nanoTime()
+                }
                 throw t
             } finally {
                 val totalMs = (System.nanoTime() - sendStart) / 1_000_000
@@ -232,9 +262,13 @@ class GemmaService(
             } catch (t: Throwable) {
                 failed = true
                 Log.w(TAG, "streamMechanicDraft collect: ${t.javaClass.simpleName}: ${t.message}")
-                try { convo.close() } catch (_: Throwable) {}
-                conversation = null
-                currentSurface = null
+                withContext(NonCancellable) {
+                    try { convo.cancelProcess() } catch (_: Throwable) {}
+                    try { convo.close() } catch (_: Throwable) {}
+                    conversation = null
+                    currentSurface = null
+                    lastCloseNs = System.nanoTime()
+                }
                 throw t
             } finally {
                 val totalMs = (System.nanoTime() - sendStart) / 1_000_000
@@ -298,9 +332,13 @@ class GemmaService(
             } catch (t: Throwable) {
                 failed = true
                 Log.w(TAG, "streamHistoryPattern collect: ${t.javaClass.simpleName}: ${t.message}")
-                try { convo.close() } catch (_: Throwable) {}
-                conversation = null
-                currentSurface = null
+                withContext(NonCancellable) {
+                    try { convo.cancelProcess() } catch (_: Throwable) {}
+                    try { convo.close() } catch (_: Throwable) {}
+                    conversation = null
+                    currentSurface = null
+                    lastCloseNs = System.nanoTime()
+                }
                 throw t
             } finally {
                 val totalMs = (System.nanoTime() - sendStart) / 1_000_000
@@ -332,16 +370,29 @@ class GemmaService(
      *
      * On surface switch, the existing Conversation is closed before the new
      * one is allocated — LiteRT-LM 0.11.0 rejects a second createConversation
-     * while another session is open with FAILED_PRECONDITION.
+     * while another session is open with FAILED_PRECONDITION. The function
+     * suspends because it may need to wait [NATIVE_SETTLE_MS] since the last
+     * close (whether on this acquire or on a prior catch handler's cleanup)
+     * before calling createConversation. Holding the mutex across that wait
+     * is intentional — it's the synchronization point that keeps a second
+     * surface from racing the previous Conversation's native teardown.
      */
-    private fun acquireConversationForSurfaceLocked(surface: String): Conversation? {
+    private suspend fun acquireConversationForSurfaceLocked(surface: String): Conversation? {
         val existing = conversation
         if (existing != null && currentSurface == surface) return existing
         if (existing != null) {
+            try { existing.cancelProcess() } catch (_: Throwable) {}
             try { existing.close() } catch (_: Throwable) {}
             conversation = null
             currentSurface = null
+            lastCloseNs = System.nanoTime()
             Log.i(TAG, "conversation closed for surface switch → $surface")
+        }
+        val sinceCloseMs = (System.nanoTime() - lastCloseNs) / 1_000_000
+        if (lastCloseNs != 0L && sinceCloseMs < NATIVE_SETTLE_MS) {
+            val waitMs = NATIVE_SETTLE_MS - sinceCloseMs
+            Log.i(TAG, "settle: waiting ${waitMs}ms for native cleanup before createConversation[$surface]")
+            delay(waitMs)
         }
         val e = engine ?: return null
         return try {
