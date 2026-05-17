@@ -14,6 +14,8 @@ CURATED REPAIR PROCEDURE — use this as the ground truth. The body you write mu
 {procedure}
 ---
 
+Numeric values, tool sizes, torque specs, gap measurements, time durations, and bolt sizes must be copied EXACTLY from the procedure. Do not paraphrase, round, restate, or modify any number, unit, or specification. If the procedure says "13 ft-lb" say "13 ft-lb" — never "13-15" or "15". If the procedure says "0.043 inches" say "0.043 inches" — never "0.04" or "0.0433" or "around 0.043".
+
 Write the body as 2 to 4 sentences covering only this step — not the whole repair. Concrete, physical, where-to-look-and-what-to-do. Use specifics from the curated procedure: tool sizes, torque numbers, gap, cylinder positions. Avoid "carefully" and "make sure" — say the thing those words are hiding ("snug, not tight" beats "be careful not to overtighten"; "the bolt should turn with hand pressure" beats "make sure it goes in straight").
 
 Friend-on-the-phone voice. One thought per sentence. When you name an action, say what the user sees or feels when it works ("releases with a soft click," "should turn easily for 5 to 6 full turns"). Never engineer vocabulary: no "polling," "telemetry," "diagnostic data," "execution," "edge," "agentic."

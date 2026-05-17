@@ -48,6 +48,28 @@ private const val METRIC_TAG = "CarCopilot"
 private const val NATIVE_SETTLE_MS: Long = 250
 
 /**
+ * Default sampler used by every surface unless overridden at acquire time.
+ * Temperature 0.3 is the right balance for the synthesis / draft / history
+ * narrative surfaces — enough latitude for Gemma to sound like a friend on
+ * the phone without descending into purple prose.
+ */
+private val DEFAULT_SAMPLER = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.3)
+
+/**
+ * Tighter sampler used only by [streamWalkthroughStep]. Step bodies must
+ * paraphrase numeric values from the curated procedure verbatim — torque,
+ * gap, time, bolt size, socket size. At temperature 0.3 (the default), Gemma
+ * mangles them: "30 minutes" becomes "300 minutes", "0.043 inch" becomes
+ * "10.0433 inch", "10mm" becomes "10.1010mm". The voice and structure
+ * survive but the numbers drift. Temperature 0.1 + topP 0.5 collapses the
+ * sampling distribution toward the most-probable token, which for a
+ * verbatim-quote constraint is "the number that's in the prompt." topK
+ * stays at 40 — the limiting filter here is top-p, not top-k.
+ */
+private val STEP_NUMERIC_FIDELITY_SAMPLER =
+    SamplerConfig(topK = 40, topP = 0.5, temperature = 0.1)
+
+/**
  * Owns the LiteRT-LM Engine + a single Conversation slot tagged by surface.
  * Construct once per process (from CarCopilotApp); never per-screen.
  *
@@ -459,7 +481,10 @@ class GemmaService(
         }
         convoMutex.withLock {
             val surfaceTag = "walkthrough_step_${planStep.number}"
-            val convo = acquireConversationForSurfaceLocked(surfaceTag) ?: run {
+            val convo = acquireConversationForSurfaceLocked(
+                surface = surfaceTag,
+                sampler = STEP_NUMERIC_FIDELITY_SAMPLER,
+            ) ?: run {
                 Log.w(TAG, "streamWalkthroughStep: conversation creation failed; emitting empty")
                 return@withLock
             }
@@ -550,7 +575,10 @@ class GemmaService(
      * is intentional — it's the synchronization point that keeps a second
      * surface from racing the previous Conversation's native teardown.
      */
-    private suspend fun acquireConversationForSurfaceLocked(surface: String): Conversation? {
+    private suspend fun acquireConversationForSurfaceLocked(
+        surface: String,
+        sampler: SamplerConfig = DEFAULT_SAMPLER,
+    ): Conversation? {
         val existing = conversation
         if (existing != null && currentSurface == surface) return existing
         if (existing != null) {
@@ -572,7 +600,7 @@ class GemmaService(
             val c = e.createConversation(
                 ConversationConfig(
                     systemInstruction = Contents.of(promptBuilder.systemPrompt),
-                    samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.3),
+                    samplerConfig = sampler,
                 )
             )
             conversation = c
