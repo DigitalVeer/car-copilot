@@ -19,7 +19,7 @@ What's live in the app today:
 - **Data layer** (Phase 11): `OBDDataSource` interface → `FixtureOBDDataSource` impl reading `app/src/main/assets/misfire.json`. `IssueBuilder` composes an `Issue` from an `OBDSnapshot` plus a `DTCTable`. The Phase-12-prep fields (`source`, `engineFamily`, `permanentDtcs`) carry on every snapshot for the future Bluetooth path.
 - **Performance** (Phase 8): the `Engine` initializes in `appScope.async` at process start, and a parallel `prewarmJob` sends a dummy "ok" turn and cancels at first token. The Conversation slot is hoisted across calls for KV-cache reuse. ~24% first-token latency win measured on Pixel 9.
 - **Surface multiplexing** (Phase 10A): LiteRT-LM 0.11.0 allows only one Conversation per Engine. `GemmaService.acquireConversationForSurfaceLocked(surface)` closes the existing Conversation when a different surface (synthesis/draft/history) acquires the slot. Each transition pays a system-prompt prefill.
-- **JVM unit test suite** (`./gradlew test`): tests in `app/src/test/java/...` cover the streaming JSON extractor (`SynthesisStateTest`, `MechanicDraftStateTest`) and the OBDSnapshot schema (`OBDSnapshotTest`).
+- **JVM unit test suite** (`./gradlew test`): tests in `app/src/test/java/...` cover the three streaming JSON extractors (`SynthesisStateTest`, `MechanicDraftStateTest`, `HistoryPatternStateTest`), the OBDSnapshot schema (`OBDSnapshotTest`), the snapshot-to-Issue builder (`IssueBuilderTest`), and the DTC classifier table contract (`DTCTableTest`). The on-device Gemma smoke test (`app/src/androidTest/.../GemmaSmokeTest.kt`) is a separate lane gated on a model push to `/data/local/tmp/`. The emulator carries its own stdlib `unittest` suite at `emulator/test_obd_emulator.py` — pure helpers, scenario invariants, and an end-to-end socket exercise.
 
 ## What's broken
 
@@ -104,6 +104,9 @@ These contracts are load-bearing. Touching any of them requires a stop-and-ask:
 
 # Run JVM unit tests
 ./gradlew test
+
+# Run the emulator's Python test suite (stdlib only, no pip install)
+python3 emulator/test_obd_emulator.py
 
 # Install on connected device
 adb install -r -d app/build/outputs/apk/debug/app-debug.apk

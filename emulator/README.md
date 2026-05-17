@@ -44,6 +44,17 @@ Each scenario carries confirmed/pending/permanent DTC lists, a Mode 01 live-PID 
 
 Echo and headers state are tracked per session and respected on every response. Mode 04 (clear DTCs) is intentionally not implemented — the Android app does not expose it.
 
+## Tests
+
+Standard-library `unittest` covers the pure helpers (`encode_dtc`, `dtc_frame`, `compute_supported_pids`, `populate_supported_pid_bitmaps`, `encode_vin_response`), structural invariants of every scenario (VIN length, 2-byte-hex PID data, freeze-frame DTC must appear in `confirmed_dtcs`, etc.), and an end-to-end socket exercise — the test boots the server in a background thread on an ephemeral port and drives the AT / Mode 01 / Mode 03 / Mode 09 surface over a real TCP connection.
+
+```bash
+python3 emulator/test_obd_emulator.py            # direct
+python3 -m unittest emulator.test_obd_emulator   # from repo root
+```
+
+No `pip install` required. Verbose output by default.
+
 ## Status
 
 Authored by Will Zhang. Android-side transport layer (`TcpTransport`, `BluetoothOBDDataSource`) is Phase 12 work and not yet wired up — the emulator is intentionally useful-but-unused until that catches up.
