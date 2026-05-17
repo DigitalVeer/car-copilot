@@ -38,7 +38,7 @@ fun extractWalkthroughStepInProgress(buffer: String): WalkthroughStepProgress {
                     't' -> sb.append('\t').also { i += 2 }
                     'r' -> sb.append('\r').also { i += 2 }
                     'b' -> sb.append('\b').also { i += 2 }
-                    'f' -> sb.append('').also { i += 2 }
+                    'f' -> sb.append('\u000C').also { i += 2 }
                     'u' -> {
                         if (i + 6 > buffer.length) return WalkthroughStepProgress(sb.toString(), false)
                         val cp = buffer.substring(i + 2, i + 6).toIntOrNull(16)
