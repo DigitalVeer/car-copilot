@@ -3,6 +3,7 @@ package com.example.carcopilot.data
 import com.example.carcopilot.model.IssueMeta
 import com.example.carcopilot.model.Route
 import com.example.carcopilot.model.Severity
+import com.example.carcopilot.model.TripReadiness
 import com.example.carcopilot.model.WalkthroughStep
 
 /**
@@ -35,6 +36,7 @@ data class DTCEntry(
     val meta: IssueMeta,
     val walkthroughSteps: List<WalkthroughStep>,
     val mechanicDraft: String,
+    val tripReadiness: TripReadiness,
 )
 
 /**
@@ -95,6 +97,10 @@ class DTCTable(private val entries: Map<String, DTCEntry>) {
 Looks like it might be an ignition coil but I wanted a pro to confirm before I buy parts. Could you give me a rough estimate?
 
 I'm trying to keep costs down — happy to bring it in when you have time.""",
+                    tripReadiness = TripReadiness(
+                        headline = "Safe for short trips",
+                        caveat = "avoid highway until fixed",
+                    ),
                 ),
             )
         )

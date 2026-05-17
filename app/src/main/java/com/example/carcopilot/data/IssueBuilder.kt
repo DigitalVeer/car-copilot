@@ -42,6 +42,7 @@ object IssueBuilder {
             liveReadings = snapshot.liveReadings,
             walkthroughSteps = entry.walkthroughSteps,
             mechanicDraft = entry.mechanicDraft,
+            tripReadiness = entry.tripReadiness,
         )
     }
 

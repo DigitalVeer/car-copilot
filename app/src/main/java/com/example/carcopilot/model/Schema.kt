@@ -49,6 +49,18 @@ data class LiveReading(
     val note: String? = null,
 )
 
+/**
+ * The driver-facing verdict that anchors the Home page: a short headline
+ * the user can read at a glance, plus an optional caveat that names the
+ * specific limit. Sourced from [com.example.carcopilot.data.DTCEntry] (so
+ * the classifier owns the answer, not the screen) and copied onto the
+ * [Issue] in [com.example.carcopilot.data.IssueBuilder].
+ */
+data class TripReadiness(
+    val headline: String,
+    val caveat: String? = null,
+)
+
 data class Issue(
     val id: String,
     val vehicle: VehicleInfo,
@@ -62,4 +74,5 @@ data class Issue(
     val liveReadings: List<LiveReading>,
     val walkthroughSteps: List<WalkthroughStep> = emptyList(),
     val mechanicDraft: String? = null,
+    val tripReadiness: TripReadiness? = null,
 )

@@ -26,6 +26,7 @@ import com.example.carcopilot.ui.components.IssueCard
 import com.example.carcopilot.ui.components.Tab
 import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
+import com.example.carcopilot.ui.components.TripReadinessTile
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import kotlinx.coroutines.delay
 
@@ -82,6 +83,10 @@ fun HomeScreen(
                     "Front-left tire low at 22 PSI",
                 ),
             )
+            misfire.tripReadiness?.let { readiness ->
+                Spacer(Modifier.height(28.dp))
+                TripReadinessTile(readiness = readiness, severity = misfire.severity)
+            }
         }
         BottomTabBar(
             selected = Tab.Home,
