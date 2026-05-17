@@ -37,6 +37,13 @@ data class DTCEntry(
     val walkthroughSteps: List<WalkthroughStep>,
     val mechanicDraft: String,
     val tripReadiness: TripReadiness,
+    /**
+     * Engine-bay diagram targets the walkthrough screen falls back to when a
+     * plan step has no specific keyword match. For misfire codes this is the
+     * affected coil; future codes can extend to brake-related, cooling-loop,
+     * etc. See [highlightsForPlanStep] for the per-step override logic.
+     */
+    val defaultHighlights: List<DiagramTarget> = emptyList(),
 )
 
 /**
@@ -101,6 +108,7 @@ I'm trying to keep costs down — happy to bring it in when you have time.""",
                         headline = "Safe for short trips",
                         caveat = "avoid highway until fixed",
                     ),
+                    defaultHighlights = listOf(DiagramTarget.COIL_1),
                 ),
             )
         )

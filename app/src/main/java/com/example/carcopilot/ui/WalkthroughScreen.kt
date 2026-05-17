@@ -30,6 +30,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.carcopilot.data.DTCTable
+import com.example.carcopilot.data.DiagramTarget
+import com.example.carcopilot.data.highlightsForPlanStep
 import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.WalkthroughStep
@@ -89,6 +92,10 @@ fun WalkthroughScreen(
     val cannedSteps: List<WalkthroughStep> = issue.walkthroughSteps
     val planFallback: List<PlanStep> = remember(issue.id) {
         cannedSteps.map { PlanStep(number = it.number, title = it.title, brief = it.body) }
+    }
+    val defaultHighlights: List<DiagramTarget> = remember(issue.id) {
+        val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
+        DTCTable.DEFAULT.lookup(code)?.defaultHighlights.orEmpty()
     }
 
     var planState by remember(issue.id) {
@@ -159,6 +166,9 @@ fun WalkthroughScreen(
         stepStates[stepIndex] ?: WalkthroughStepState.Thinking
     val ctaEnabled = activeStepState is WalkthroughStepState.Ready
     val ctaLabel = if (stepIndex == total - 1) "Finish →" else "Done — next step →"
+    val activeHighlights: List<DiagramTarget> = activePlanStep
+        ?.let { highlightsForPlanStep(it, defaultHighlights) }
+        ?: defaultHighlights
 
     Column(
         modifier = Modifier
@@ -184,7 +194,10 @@ fun WalkthroughScreen(
                 label = stripLabelFor(planState, activePlanStep),
                 severity = issue.severity,
             )
-            DiagramCard(caption = diagramCaptionFor(planState, activePlanStep))
+            DiagramCard(
+                caption = diagramCaptionFor(planState, activePlanStep),
+                highlights = activeHighlights,
+            )
             Spacer(Modifier.height(18.dp))
             CtaButton(
                 label = ctaLabel,
@@ -278,7 +291,7 @@ private fun diagramCaptionFor(planState: WalkthroughPlanState, activePlanStep: P
     }
 
 @Composable
-private fun DiagramCard(caption: String) {
+private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -294,7 +307,7 @@ private fun DiagramCard(caption: String) {
                 .background(Color(0xFF050505))
                 .padding(18.dp),
         ) {
-            EngineDiagram()
+            EngineDiagram(highlights = highlights)
         }
         Spacer(Modifier.height(12.dp))
         Text(

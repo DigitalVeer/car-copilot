@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.res.ResourcesCompat
 import com.example.carcopilot.R
+import com.example.carcopilot.data.DiagramTarget
 import com.example.carcopilot.ui.theme.CarCopilotColors
 
 private const val VIEW_W = 280f
@@ -30,18 +31,35 @@ private const val VIEW_H = 180f
 /**
  * Port of mockup §06 walkthrough engine-bay SVG.
  *
- * ViewBox is 280×180. Aspect ratio is fixed at the same; the surrounding
- * Box determines absolute width. Shapes go on a Canvas; the three labels
- * use nativeCanvas.drawText with the bundled JetBrains Mono typeface so
- * we don't have to position Compose Text overlays at sub-dp precision.
+ * ViewBox is 280×180. Aspect ratio is fixed; the surrounding Box determines
+ * absolute width. Shapes go on a Canvas; the labels use nativeCanvas.drawText
+ * with the bundled JetBrains Mono typeface so we don't have to position
+ * Compose Text overlays at sub-dp precision.
+ *
+ * Highlight rendering is layered so a COIL_1 → SPARK_PLUG transition looks
+ * like the focus drilling into the cylinder, not standing still on the
+ * same shape:
+ *   - COIL_n  → fill the 32×38 coil rectangle in accent, draw top arrow
+ *               + "COIL n — REPLACE THIS" label.
+ *   - SPARK_PLUG → small accent dot inside the cylinder 1 coil well (it
+ *               always means cylinder 1 in the P0301 demo), with a "SPARK
+ *               PLUG" label below the well so the eye moves further down
+ *               than for the coil highlight.
+ *   - BATTERY_NEG → accent the negative terminal of the battery silhouette
+ *               at the bottom-left, with a "DISCONNECT (−)" label.
+ *
+ * Empty highlights render the diagram with no accents — a calm "this is the
+ * engine bay you're working in" overview state.
  */
 @Composable
-fun EngineDiagram(highlightedCoil: Int = 1, modifier: Modifier = Modifier) {
+fun EngineDiagram(
+    highlights: List<DiagramTarget> = emptyList(),
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val typeface: Typeface = remember(context) {
         ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular) ?: Typeface.MONOSPACE
     }
-    val outline = CarCopilotColors.TextFaint
     val frame = CarCopilotColors.LineBright
     val accent = CarCopilotColors.Accent
     val muted = CarCopilotColors.TextFaint
@@ -49,6 +67,20 @@ fun EngineDiagram(highlightedCoil: Int = 1, modifier: Modifier = Modifier) {
     val valveCoverStroke = androidx.compose.ui.graphics.Color(0xFF4A4A47)
     val coilStroke = androidx.compose.ui.graphics.Color(0xFF4A4A47)
     val engineStroke = androidx.compose.ui.graphics.Color(0xFF3A3A37)
+
+    val highlightedCoils: Set<Int> = highlights.mapNotNull { target ->
+        when (target) {
+            DiagramTarget.COIL_1 -> 1
+            DiagramTarget.COIL_2 -> 2
+            DiagramTarget.COIL_3 -> 3
+            DiagramTarget.COIL_4 -> 4
+            else -> null
+        }
+    }.toSet()
+    val sparkPlugHighlighted = DiagramTarget.SPARK_PLUG in highlights
+    val batteryNegHighlighted = DiagramTarget.BATTERY_NEG in highlights
+    val primaryHighlight = highlights.firstOrNull()
+
     Canvas(
         modifier = modifier
             .fillMaxWidth()
@@ -64,11 +96,12 @@ fun EngineDiagram(highlightedCoil: Int = 1, modifier: Modifier = Modifier) {
         // Four coils
         val coilXs = listOf(56f, 100f, 144f, 188f)
         coilXs.forEachIndexed { idx, x ->
-            val active = (idx + 1) == highlightedCoil
+            val cylinder = idx + 1
+            val active = cylinder in highlightedCoils
             val color = if (active) accent else coilStroke
             val fill = if (active) accent else null
             drawRoundedRect(x, 40f, 32f, 38f, 3f, sx, sy, color = color, strokeWidth = 1.5f * sx, fillColor = fill)
-            // Wire connector
+            // Wire connector stub
             drawLine(
                 color = color,
                 start = Offset((x + 16f) * sx, 33f * sy),
@@ -108,21 +141,64 @@ fun EngineDiagram(highlightedCoil: Int = 1, modifier: Modifier = Modifier) {
             color = engineStroke,
             style = Stroke(width = 1.5f * sx, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
-        // Arrow + label for the highlighted coil
-        val arrowX = coilXs[highlightedCoil - 1] + 16f
-        drawLine(
-            color = accent,
-            start = Offset(arrowX * sx, 15f * sy),
-            end = Offset(arrowX * sx, 32f * sy),
-            strokeWidth = 1.5f * sx,
+        // Battery silhouette (always drawn; terminals tint on highlight).
+        // Sits in the bottom-left zone clear of the left hose.
+        drawBattery(
+            x = 60f, y = 120f, w = 36f, h = 22f, sx = sx, sy = sy,
+            bodyStroke = engineStroke,
+            negColor = if (batteryNegHighlighted) accent else muted,
+            posColor = muted,
         )
-        val arrowHead = Path().apply {
-            moveTo((arrowX - 4f) * sx, 28f * sy)
-            lineTo(arrowX * sx, 36f * sy)
-            lineTo((arrowX + 4f) * sx, 28f * sy)
-            close()
+
+        // Top arrow + COIL label — only when the primary highlight is a coil.
+        val coilPrimary = (primaryHighlight as? DiagramTarget)?.let {
+            when (it) {
+                DiagramTarget.COIL_1 -> 1
+                DiagramTarget.COIL_2 -> 2
+                DiagramTarget.COIL_3 -> 3
+                DiagramTarget.COIL_4 -> 4
+                else -> null
+            }
         }
-        drawPath(path = arrowHead, color = accent)
+        if (coilPrimary != null) {
+            val arrowX = coilXs[coilPrimary - 1] + 16f
+            drawLine(
+                color = accent,
+                start = Offset(arrowX * sx, 15f * sy),
+                end = Offset(arrowX * sx, 32f * sy),
+                strokeWidth = 1.5f * sx,
+            )
+            val arrowHead = Path().apply {
+                moveTo((arrowX - 4f) * sx, 28f * sy)
+                lineTo(arrowX * sx, 36f * sy)
+                lineTo((arrowX + 4f) * sx, 28f * sy)
+                close()
+            }
+            drawPath(path = arrowHead, color = accent)
+        }
+
+        // Spark plug — inner dot inside cylinder 1's coil well, layered on top
+        // of the coil rectangle. Always cylinder 1 in the P0301 demo. Smaller
+        // than the coil fill so a COIL_1 → SPARK_PLUG transition reads as
+        // the focus moving deeper.
+        if (sparkPlugHighlighted) {
+            val plugCenterX = coilXs[0] + 16f
+            val plugCenterY = 59f  // mid-coil vertically (coil spans y=40 to y=78)
+            // Outer ghost ring suggesting depth
+            drawCircle(
+                color = accent,
+                radius = 9f * sx,
+                center = Offset(plugCenterX * sx, plugCenterY * sy),
+                style = Stroke(width = 1f * sx),
+            )
+            // Inner solid dot — the plug itself
+            drawCircle(
+                color = accent,
+                radius = 4.5f * sx,
+                center = Offset(plugCenterX * sx, plugCenterY * sy),
+            )
+        }
+
         // Native text labels
         drawIntoCanvas { canvas ->
             val titlePaint = Paint().apply {
@@ -133,12 +209,36 @@ fun EngineDiagram(highlightedCoil: Int = 1, modifier: Modifier = Modifier) {
                 this.isAntiAlias = true
                 this.letterSpacing = 0.06f
             }
-            canvas.nativeCanvas.drawText(
-                "COIL ${highlightedCoil} — REPLACE THIS",
-                arrowX * sx,
-                11f * sy,
-                titlePaint,
-            )
+            when {
+                coilPrimary != null -> {
+                    val arrowX = coilXs[coilPrimary - 1] + 16f
+                    canvas.nativeCanvas.drawText(
+                        "COIL $coilPrimary — REPLACE THIS",
+                        arrowX * sx,
+                        11f * sy,
+                        titlePaint,
+                    )
+                }
+                sparkPlugHighlighted -> {
+                    val plugLabelX = coilXs[0] + 16f
+                    // Label below the coil well so the eye drops downward,
+                    // distinguishing this from the coil label position.
+                    canvas.nativeCanvas.drawText(
+                        "SPARK PLUG — INSIDE THE WELL",
+                        plugLabelX * sx,
+                        92f * sy,
+                        titlePaint,
+                    )
+                }
+                batteryNegHighlighted -> {
+                    canvas.nativeCanvas.drawText(
+                        "DISCONNECT (−)",
+                        78f * sx,
+                        115f * sy,
+                        titlePaint,
+                    )
+                }
+            }
             val edgePaint = Paint().apply {
                 this.color = muted.toArgb()
                 this.textSize = 8f * sy
@@ -147,10 +247,45 @@ fun EngineDiagram(highlightedCoil: Int = 1, modifier: Modifier = Modifier) {
                 this.isAntiAlias = true
                 this.letterSpacing = 0.12f
             }
-            canvas.nativeCanvas.drawText("← FRONT", 72f * sx, 170f * sy, edgePaint)
-            canvas.nativeCanvas.drawText("CABIN →", 208f * sx, 170f * sy, edgePaint)
+            canvas.nativeCanvas.drawText("← FRONT", 130f * sx, 170f * sy, edgePaint)
+            canvas.nativeCanvas.drawText("CABIN →", 220f * sx, 170f * sy, edgePaint)
+            // suppress unused-var warning while keeping `frame` available for
+            // future highlight shapes that need the brighter line color.
+            @Suppress("UNUSED_VARIABLE")
+            val unused = frame
         }
     }
+}
+
+private fun DrawScope.drawBattery(
+    x: Float,
+    y: Float,
+    w: Float,
+    h: Float,
+    sx: Float,
+    sy: Float,
+    bodyStroke: androidx.compose.ui.graphics.Color,
+    negColor: androidx.compose.ui.graphics.Color,
+    posColor: androidx.compose.ui.graphics.Color,
+) {
+    drawRoundedRect(x, y, w, h, 2f, sx, sy, color = bodyStroke, strokeWidth = 1f * sx)
+    val terminalW = 6f
+    val terminalH = 4f
+    // Negative on the left, positive on the right — convention matches typical
+    // top-post automotive batteries.
+    val negX = x + w * 0.18f
+    val posX = x + w * 0.66f
+    val termTopY = y - terminalH
+    // Negative terminal
+    drawRoundedRect(
+        negX, termTopY, terminalW, terminalH, 1f, sx, sy,
+        color = negColor, fill = true, fillColor = negColor,
+    )
+    // Positive terminal
+    drawRoundedRect(
+        posX, termTopY, terminalW, terminalH, 1f, sx, sy,
+        color = posColor, fill = true, fillColor = posColor,
+    )
 }
 
 private fun DrawScope.drawRoundedRect(
