@@ -25,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
@@ -304,15 +303,29 @@ private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
     }
 }
 
+/**
+ * Walkthrough CTA. Canonical Compose pattern: opacity baked into the
+ * background color rather than applied via Modifier.alpha (which would
+ * allocate a graphics layer prone to stale-redraw under the loading→content
+ * Crossfade above), and `clickable(enabled = …)` rather than a conditional
+ * Modifier branch (which would change the modifier chain identity on every
+ * enabled flip and force a layout-node reattach).
+ *
+ * The combination of an alpha-layer + a swap-shaped modifier chain reproduced
+ * the "tappable but not visually rendered" bug on Pixel 9 during the W2
+ * commit-1 smoke test — Compose scheduled the alpha invalidation but the
+ * RenderNode didn't redraw until a touch event dirtied the region, so taps
+ * on the invisible button made it appear and then work. See commit message
+ * for the full investigation.
+ */
 @Composable
 private fun CtaButton(label: String, enabled: Boolean, onClick: () -> Unit) {
-    val base = Modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(10.dp))
-        .background(CarCopilotColors.Accent)
-        .alpha(if (enabled) 1f else 0.4f)
     Box(
-        modifier = (if (enabled) base.clickable(onClick = onClick) else base)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(CarCopilotColors.Accent.copy(alpha = if (enabled) 1f else 0.4f))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
