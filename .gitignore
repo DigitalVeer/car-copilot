@@ -19,8 +19,9 @@ local.properties
 *.task
 /models/
 
-# Claude Code session state
-/.claude/
+# Claude Code session state — ignore everything except the team-shared settings.json
+/.claude/*
+!/.claude/settings.json
 
 # Python (emulator)
 __pycache__/
