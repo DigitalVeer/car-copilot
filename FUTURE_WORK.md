@@ -82,3 +82,21 @@ The emulator itself landed in commit `77db981` and lives at `emulator/obd_emulat
 ### BluetoothOBDDataSource
 
 The `OBDDataSource` interface and `OBDSnapshot` shape are already BLE-ready as of Phase 11A / 12-prep — suspending `readSnapshot()` returning `Result<OBDSnapshot>`, hot `connectionState` StateFlow, snapshot tagged with `DataSource.BLUETOOTH` provenance and `EngineFamily` from VIN decode. Phase 12 is the actual implementation: pairing flow, ELM327 AT command sequence, PID round-trip, DTC parsing, error handling for paired-but-not-linked / out-of-range / vehicle-ignition-off. The Python `RealOBDSource` in `reference/carcopilot_design.md §8.2` is the structural reference; the Kotlin equivalent will use BLE GATT rather than python-obd.
+
+## Known model behaviors
+
+### Gemma 4 E4B numeric-token hallucination on simple integer+unit patterns
+
+When generating step bodies against the grounded P0301 procedure, Gemma 4 E4B on LiteRT-LM 0.11.0 reliably inserts decimal points into simple integer + unit patterns: "10mm" → "10.10mm", "30 seconds" → "30.30 seconds", "50 mph" → "50.0 mph". Multi-digit decimal values with internal structure ("0.043 inches", "18 Nm", "13 ft-lb") survive correctly. Separately, DTC codes drift by one character ("P0302" → "P0303") — a content-comprehension error distinct from the tokenizer effect.
+
+Attempted mitigations (W2.1): lower temperature (0.1) + explicit numeric-preservation rule in walkthrough_step.md. Improved spec-heavy step from broken to clean; did not eliminate decimal-insertion on simple patterns.
+
+Diagnosis: BPE tokenizer splits "10mm" into separate tokens such that the most-probable continuation after "10" is a decimal segment. Lower temperature concentrates sampling on the same wrong token rather than fixing it. Greedy decoding would not help.
+
+Future approaches when revisited:
+- Constrained decoding against an allow-list of canonical numbers extracted from the procedure
+- Post-generation regex sweep replacing approximate matches with ground-truth values
+- Template-based step body with placeholder slots filled deterministically from the procedure
+- Re-evaluation when SDK ships a different decoder or model variant with different tokenization
+
+Not currently blocking: spec-heavy step bodies (the kind that matter for repair correctness) survive correctly. Simple bolt-size patterns drift but rarely affect outcome.
