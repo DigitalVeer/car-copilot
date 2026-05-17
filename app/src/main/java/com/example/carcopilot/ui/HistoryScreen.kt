@@ -70,8 +70,9 @@ fun HistoryScreen(
             )
             StatRow(History.STATS)
             Spacer(Modifier.height(22.dp))
-            History.ENTRIES.groupBy { it.month }.forEach { (month, entries) ->
-                MonthHeading(month)
+            History.ENTRIES.groupBy { it.month }.entries.forEachIndexed { groupIdx, (month, entries) ->
+                MonthHeading(month, isFirst = groupIdx == 0)
+                Spacer(Modifier.height(10.dp))
                 entries.forEachIndexed { idx, entry ->
                     HistoryRow(entry, isLast = idx == entries.lastIndex)
                 }
@@ -131,14 +132,14 @@ private fun RowScope.StatCard(value: String, label: String, accent: Boolean = fa
 }
 
 @Composable
-private fun MonthHeading(month: String) {
+private fun MonthHeading(month: String, isFirst: Boolean = false) {
     Text(
         text = month.uppercase(),
         style = CarCopilotTypography.EvidenceSectionHeading.copy(letterSpacing = 0.18.em),
         color = CarCopilotColors.TextFaint,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 18.dp, bottom = 8.dp)
+            .padding(top = if (isFirst) 8.dp else 18.dp, bottom = 8.dp)
             .drawBehind {
                 val y = size.height + 8.dp.toPx()
                 drawLine(

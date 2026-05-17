@@ -56,7 +56,7 @@ fun AnimatedAIStrip(
             Column(
                 modifier = Modifier
                     .padding(start = 14.dp, top = 4.dp, bottom = 4.dp)
-                    .defaultMinSize(minHeight = 52.dp),
+                    .defaultMinSize(minHeight = 60.dp),
             ) {
                 Text(
                     text = label,
