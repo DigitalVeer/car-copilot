@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
                         composable("walkthrough") {
                             WalkthroughScreen(
                                 issue = misfire,
+                                gemma = gemma,
                                 onBack = { nav.popBackStack() },
                                 onFinish = toHome,
                                 onHomeTab = toHome,
