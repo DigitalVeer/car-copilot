@@ -30,7 +30,7 @@ android {
 
         // OBD data source: FIXTURE (default), EMULATOR (TCP WiFi), BLUETOOTH
         // Usage: ./gradlew assembleDebug -PdataSource=EMULATOR
-        val dataSource = (project.findProperty("dataSource") as? String) ?: "FIXTURE"
+        val dataSource = (project.findProperty("dataSource") as? String) ?: "BLUETOOTH"
         require(dataSource in setOf("FIXTURE", "EMULATOR", "BLUETOOTH")) {
             "dataSource must be FIXTURE, EMULATOR, or BLUETOOTH"
         }
@@ -41,11 +41,6 @@ android {
         val obdHost = (project.findProperty("obdHost") as? String) ?: "10.0.2.2"
         buildConfigField("String", "OBD_EMULATOR_HOST", "\"$obdHost\"")
 
-        // Bluetooth dongle name as shown in Android Settings → Bluetooth paired devices
-        // Common names: "OBDII", "ELM327", "V-LINK", "OBD2"
-        // Usage: ./gradlew assembleDebug -PdataSource=BLUETOOTH -PbtDeviceName=OBDII
-        val btDeviceName = (project.findProperty("btDeviceName") as? String) ?: "OBDII"
-        buildConfigField("String", "BT_DEVICE_NAME", "\"$btDeviceName\"")
     }
 
     buildTypes {

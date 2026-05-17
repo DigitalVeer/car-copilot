@@ -1,6 +1,5 @@
 package com.example.carcopilot.data
 
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import com.example.carcopilot.model.VehicleInfo
@@ -13,24 +12,18 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Connects to a paired ELM327 Bluetooth dongle using Classic Bluetooth SPP
- * and speaks the same ELM327 AT command protocol as [TcpOBDDataSource].
+ * Connects to a paired ELM327 dongle over Classic Bluetooth SPP.
  *
- * Prerequisites:
- *   1. Pair the dongle in Android Settings → Bluetooth before launching.
- *   2. Pass the dongle's Bluetooth name (e.g. "OBDII", "ELM327", "V-LINK")
- *      as [deviceName]. The adapter scans paired devices for a name match.
+ * Device discovery: scans paired devices for common OBD name hints
+ * (OBD, ELM, VLINK, VEEPEAK, SCAN, EOBD). If none match, falls back
+ * to the first paired device. No hardcoded name required — pair the
+ * dongle in Android Settings → Bluetooth and it will be found.
  *
- * Permissions required in manifest (already added):
- *   BLUETOOTH_CONNECT (API 31+), BLUETOOTH / BLUETOOTH_ADMIN (API < 31)
- *
- * Each [readSnapshot] call opens a fresh RFCOMM connection, runs the
- * handshake, polls all PIDs, and closes the socket — same stateless
- * pattern as [TcpOBDDataSource].
+ * Each [readSnapshot] opens a fresh RFCOMM connection, runs the ELM327
+ * handshake, polls all PIDs, and closes the socket.
  */
 class BluetoothOBDDataSource(
     private val context: Context,
-    private val deviceName: String,
     private val vehicle: VehicleInfo,
     private val engineFamily: EngineFamily = EngineFamily.UNKNOWN,
 ) : OBDDataSource {
@@ -43,22 +36,26 @@ class BluetoothOBDDataSource(
             _connectionState.value = ConnectionState.Connecting
 
             val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager)
-                .adapter
-                ?: error("Bluetooth not available on this device")
+                .adapter ?: error("Bluetooth not available on this device")
 
             check(adapter.isEnabled) { "Bluetooth is off — enable it in Settings" }
 
             @Suppress("MissingPermission")
-            val device = adapter.bondedDevices
-                .firstOrNull { it.name == deviceName }
-                ?: error("Dongle \"$deviceName\" not found in paired devices. Pair it in Settings → Bluetooth first.")
+            val bonded = adapter.bondedDevices.toList()
+            check(bonded.isNotEmpty()) {
+                "No paired Bluetooth devices. Pair your OBD dongle in Settings → Bluetooth first."
+            }
+
+            @Suppress("MissingPermission")
+            val device = bonded.firstOrNull { d ->
+                OBD_NAME_HINTS.any { hint -> d.name?.contains(hint, ignoreCase = true) == true }
+            } ?: bonded.first()
+
+            @Suppress("MissingPermission")
+            if (adapter.isDiscovering) adapter.cancelDiscovery()
 
             @Suppress("MissingPermission")
             val socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-
-            // Stop discovery if running — it slows the RFCOMM connection
-            @Suppress("MissingPermission")
-            if (adapter.isDiscovering) adapter.cancelDiscovery()
 
             socket.use { s ->
                 @Suppress("MissingPermission")
@@ -99,7 +96,11 @@ class BluetoothOBDDataSource(
     }
 
     companion object {
-        // Standard Bluetooth SPP UUID — all ELM327 dongles use this
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+        // Case-insensitive substrings common across OBD dongle brands
+        private val OBD_NAME_HINTS = listOf(
+            "OBD", "ELM", "VLINK", "V-LINK", "VEEPEAK", "SCAN", "EOBD", "OBDII", "OBD2",
+        )
     }
 }

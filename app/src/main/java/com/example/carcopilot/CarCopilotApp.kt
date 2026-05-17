@@ -53,7 +53,6 @@ class CarCopilotApp : Application() {
             )
             "BLUETOOTH" -> BluetoothOBDDataSource(
                 context = this,
-                deviceName = BuildConfig.BT_DEVICE_NAME,
                 vehicle = VehicleInfo(
                     year = 2021, make = "VW", model = "Jetta",
                     mileage = 0, displayName = "2021 VW Jetta",
