@@ -39,8 +39,8 @@ import com.example.carcopilot.ui.components.accentColor
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
 
-private const val BAR_PULSE_CYCLE_MS = 1400
-private const val BAR_PULSE_MIN_ALPHA = 0.5f
+private const val THINKING_GLOW_CYCLE_MS = 1100
+private const val THINKING_GLOW_PEAK_ALPHA = 0.55f
 private const val STREAM_GLOW_ALPHA = 0.35f
 private const val GLOW_TRANSITION_MS = 250
 
@@ -94,11 +94,14 @@ fun AnimatedAIStrip(
 }
 
 /**
- * The 2dp severity bar with three states:
- *  - Thinking  → pulses alpha 0.5→1.0 on a ~1.4s sine-ish loop
- *  - Streaming → static at full alpha, plus an 8dp horizontal-gradient glow
- *                fading from accent.0.35 to transparent into the body padding
- *  - Ready     → static, full alpha, no glow
+ * The 2dp severity bar with a glow halo carrying all the motion:
+ *  - Thinking  → glow alpha pulses 0 → 0.55 → 0 on a 1.1s loop. The bar itself
+ *                stays solid. The motion happens across 4× more pixels than the
+ *                bar's own width, which is what makes it visible at all.
+ *  - Streaming → glow holds steady at 0.35 (fades in over 250ms). Calmer than
+ *                the Thinking pulse on purpose — "warming up" reads more
+ *                energetic than "streaming."
+ *  - Ready     → no glow.
  *
  * The 8dp glow slot is always present in layout (just invisible at rest) so the
  * body column never shifts when the state changes. The Column's start padding
@@ -109,19 +112,20 @@ private fun SeverityBar(state: SynthesisState, accent: Color) {
     val isThinking = state is SynthesisState.Thinking
     val isStreaming = state is SynthesisState.Streaming
 
-    val pulseAlpha = if (isThinking) rememberPulseAlpha() else 1f
-    val glowAlpha by animateFloatAsState(
+    val thinkingGlow = if (isThinking) rememberThinkingGlowAlpha() else 0f
+    val streamingGlow by animateFloatAsState(
         targetValue = if (isStreaming) STREAM_GLOW_ALPHA else 0f,
         animationSpec = tween(durationMillis = GLOW_TRANSITION_MS),
         label = "stream-glow-alpha",
     )
+    val glowAlpha = maxOf(thinkingGlow, streamingGlow)
 
     Row(modifier = Modifier.fillMaxHeight()) {
         Box(
             modifier = Modifier
                 .width(2.dp)
                 .fillMaxHeight()
-                .background(accent.copy(alpha = pulseAlpha)),
+                .background(accent),
         )
         Box(
             modifier = Modifier
@@ -144,17 +148,17 @@ private fun SeverityBar(state: SynthesisState, accent: Color) {
 }
 
 @Composable
-private fun rememberPulseAlpha(): Float {
-    val transition = rememberInfiniteTransition(label = "severity-bar-pulse")
+private fun rememberThinkingGlowAlpha(): Float {
+    val transition = rememberInfiniteTransition(label = "thinking-glow-pulse")
     val alpha by transition.animateFloat(
-        initialValue = BAR_PULSE_MIN_ALPHA,
-        targetValue = BAR_PULSE_MIN_ALPHA,
+        initialValue = 0f,
+        targetValue = 0f,
         animationSpec = infiniteRepeatable(
             animation = keyframes {
-                durationMillis = BAR_PULSE_CYCLE_MS
-                BAR_PULSE_MIN_ALPHA at 0 using LinearEasing
-                1f at BAR_PULSE_CYCLE_MS / 2 using LinearEasing
-                BAR_PULSE_MIN_ALPHA at BAR_PULSE_CYCLE_MS using LinearEasing
+                durationMillis = THINKING_GLOW_CYCLE_MS
+                0f at 0 using LinearEasing
+                THINKING_GLOW_PEAK_ALPHA at THINKING_GLOW_CYCLE_MS / 2 using LinearEasing
+                0f at THINKING_GLOW_CYCLE_MS using LinearEasing
             },
             repeatMode = RepeatMode.Restart,
         ),
