@@ -1,5 +1,27 @@
 # CAR·COPILOT — Technical Design Document
 
+> **STATUS: MIXED.** This is the original Python-backend technical design. Most of it is archaeology — the Android app does not run Python, Ollama, Docker, or pytest. Still load-bearing as **conceptual** reference:
+>
+> - **§2 Core principles** (deterministic structure / generative voice, local-only, schema-first, polymorphic UI by classification, no location, fail-soft) — these are the design-level rules the Android app still honors.
+> - **§4 Core schema** — the original Python pydantic shapes that `app/src/main/java/com/example/carcopilot/model/Schema.kt` mirrors (with Android-only fields layered on top of `OBDSnapshot` in Phase 12-prep).
+> - **§5 Classification layer** — the conceptual model that `data/DTCTable.kt` and `data/IssueBuilder.kt` implement in Kotlin.
+> - **§11 UI contract** — still describes how each screen renders an Issue; useful when adding a new surface.
+> - **Appendix B (DTC table seed)** — list of additional codes worth adding when `DTCTable` grows past one entry.
+>
+> **Dead / superseded:**
+>
+> - **§3 Project structure** — Python project layout, not Android.
+> - **§6 Gemma adapter** — Ollama HTTP integration. The Android equivalent is `inference/GemmaService.kt` over LiteRT-LM (no HTTP, no Ollama).
+> - **§7 Pipeline** — `asyncio` orchestration. Compose `LaunchedEffect` collect blocks fill this role on Android.
+> - **§8 python-OBD integration** — Python OBD library. The Android seam is `data/OBDDataSource.kt`.
+> - **§10 History** — Python JSONL store. The Android `model/History.kt` is in-memory fixture today.
+> - **§12 Development environment** — docker-compose + Ollama. Not used.
+> - **§13 Testing strategy** — pytest patterns. The Android suite is JUnit; see `./gradlew test`.
+> - **§14 Phase plan** — Phase 1-5 here is the Python timeline. The Android phases ran in a separate cadence (Phase 5 = Android pivot; we are past Phase 12-prep).
+> - **Appendix A prompts** — superseded by `reference/prompts/*.md`, which are the authoritative versions consumed by the app at runtime.
+
+---
+
 **Version:** 0.1 (post-mockup) · **Status:** ready to build · **Scope:** Python core + Gemma adapter + python-OBD. **Out of scope:** Android (separate doc).
 
 This document is the source of truth for the backend. It is written to be consumed by Claude coding agents and by humans. Where you see ambiguity in this doc, prefer the most deterministic and most testable interpretation — that's what we want.

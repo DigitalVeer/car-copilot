@@ -1,5 +1,9 @@
 # CAR·COPILOT — Phase 5 spec · Android pivot
 
+> **STATUS: HISTORICAL.** Phase 5 shipped (`b7d3ac3`, `6375949`, `0974c87`, `dacff09`). The minimum viable demo this document specs — two screens, one live Gemma surface, canned everything-else — is the floor the current app is built on, not its current shape. Five screens + three live surfaces are wired today; see CLAUDE.md. Kept for the *why* behind decisions like LiteRT-LM-not-AICore (§4), `.litertlm`-not-`.task`, the `<uses-native-library>` manifest entries, and the JSON-tolerant parser (§7). Those constraints are still load-bearing — they just no longer need to be re-derived from this doc.
+
+---
+
 **Status:** active · **Scope:** minimum viable on-device Gemma demo for hackathon submission · **Deadline:** Sunday evening (hard checkpoint Saturday evening for go/no-go)
 
 This document supplements `carcopilot_design.md`. The Python work in Phases 1-2 is the reference implementation; this phase ports the load-bearing parts to Android and runs Gemma on-device via Mediapipe LLM Inference. The deliverable is one Android APK that demonstrates a single end-to-end flow with Gemma generating synthesis text locally on the phone.

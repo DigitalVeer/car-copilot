@@ -1,5 +1,9 @@
 # CAR·COPILOT — Phase 6 spec · Visual polish
 
+> **STATUS: HISTORICAL.** Phase 6 shipped in commits `747a0db`, `406c9fb`, `36ac740`, `07acf5c`. The design tokens described in §4 now live in `ui/theme/Color.kt` and `ui/theme/Type.kt`; the components described in §5 are implemented under `ui/components/`. This doc is preserved for the *why* behind specific decisions (e.g., 2dp accent bar, 1.2s dot cycle) — not as a controlling spec. See CLAUDE.md for current state.
+
+---
+
 **Status:** active · **Scope:** restyle the existing Android app to match the HTML mockup · **Prerequisite:** Phase 5 Checkpoint B is committed and working · **Deadline:** before recording
 
 This document supplements `carcopilot_android_spec.md`. The app currently runs end-to-end with on-device Gemma streaming but uses default Material3 surfaces and system fonts. This phase brings the visual fidelity up to the mockup target without touching the functional contract.
