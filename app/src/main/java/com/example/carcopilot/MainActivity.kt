@@ -13,7 +13,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.carcopilot.model.Fixtures
 import com.example.carcopilot.ui.HistoryScreen
 import com.example.carcopilot.ui.HomeScreen
 import com.example.carcopilot.ui.IssueScreen
@@ -29,8 +28,9 @@ class MainActivity : ComponentActivity() {
             CarCopilotTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val ctx = LocalContext.current
-                    val gemma = (ctx.applicationContext as CarCopilotApp).gemma
-                    val misfire = remember { Fixtures.loadMisfireIssue(ctx) }
+                    val app = ctx.applicationContext as CarCopilotApp
+                    val gemma = app.gemma
+                    val misfire = remember { app.initialIssue }
                     val nav = rememberNavController()
                     val toHistory: () -> Unit = {
                         nav.navigate("history") { launchSingleTop = true }
