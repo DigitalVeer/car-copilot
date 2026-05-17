@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.model.Severity
+import com.example.carcopilot.ui.components.OnDeviceChip
 import com.example.carcopilot.ui.components.ThinkingDots
 import com.example.carcopilot.ui.components.accentColor
 import com.example.carcopilot.ui.theme.CarCopilotColors
@@ -58,11 +60,21 @@ fun AnimatedAIStrip(
                     .padding(start = 14.dp, top = 4.dp, bottom = 4.dp)
                     .defaultMinSize(minHeight = 60.dp),
             ) {
-                Text(
-                    text = label,
-                    style = CarCopilotTypography.AiLabel,
-                    color = accent,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = label,
+                        style = CarCopilotTypography.AiLabel,
+                        color = accent,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OnDeviceChip(
+                        severity = severity,
+                        breathing = state is SynthesisState.Thinking,
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
                 AiBody(state = state, severity = severity)
             }
