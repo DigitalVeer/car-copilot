@@ -96,6 +96,47 @@ Looks like it might be an ignition coil but I wanted a pro to confirm before I b
 
 I'm trying to keep costs down — happy to bring it in when you have time.""",
                 ),
+                "P0171" to DTCEntry(
+                    code = "P0171",
+                    description = "System too lean (Bank 1)",
+                    category = "fuel_system",
+                    severity = Severity.warning,
+                    route = Route.diy,
+                    title = "Engine running lean — MAF sensor or air leak",
+                    subtitle = "Your engine isn't getting enough fuel in the mix. Usually a dirty air flow sensor or a crack in the intake hose.",
+                    meta = IssueMeta(
+                        costUsdMin = 15,
+                        costUsdMax = 180,
+                        timeMinutes = 30,
+                        difficulty = "easy",
+                        drivability = "safe for short trips, avoid extended highway driving",
+                    ),
+                    walkthroughSteps = listOf(
+                        WalkthroughStep(
+                            number = 1,
+                            title = "Clean the MAF sensor",
+                            body = "The MAF sensor sits on the air intake pipe between the air filter box and the engine. Disconnect the wire connector, then spray MAF cleaner inside — don't touch the thin sensing wire. Let it dry for 10 minutes, reconnect, and start the engine. If the trim readings drop back toward zero, you found it.",
+                            diagramHint = "Intake pipe — MAF sensor between air filter box and throttle body",
+                        ),
+                        WalkthroughStep(
+                            number = 2,
+                            title = "Check the intake hose for cracks",
+                            body = "Run your hand along the large rubber hose from the air filter box to the engine. Feel for cracks, holes, or loose clamps. A crack lets in air that bypasses the MAF sensor — the ECU doesn't account for it, so the mix goes lean. Tighten any loose clamps with a flat screwdriver.",
+                            diagramHint = "Rubber intake hose and clamps",
+                        ),
+                        WalkthroughStep(
+                            number = 3,
+                            title = "Listen for vacuum leaks",
+                            body = "With the engine running, listen for a hissing sound near the intake manifold. Small rubber vacuum hoses connect the intake to sensors around the engine — any cracked or disconnected one leaks air past the MAF. You can use a unlit propane torch or a straw to trace the hiss. Don't use water or flammable spray near a hot engine.",
+                            diagramHint = "Intake manifold vacuum lines",
+                        ),
+                    ),
+                    mechanicDraft = """Hi — my car has a P0171 fault code (System Too Lean, Bank 1). The long-term fuel trim is at +18%, which means the ECU has been adding extra fuel for a while to compensate.
+
+I've sprayed the MAF sensor and checked the intake hose but the code keeps coming back. Could you check fuel pressure and look for any vacuum leaks I might have missed?
+
+Happy to bring it in at your convenience.""",
+                ),
             )
         )
     }
