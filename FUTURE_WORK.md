@@ -77,6 +77,8 @@ Surfaced from Will's `will/dev` branch alongside the `VehicleState` schema work 
 
 Will's idea — a small Python server that speaks ELM327 over a TCP socket, with the Android app connecting via WiFi instead of Bluetooth. Decouples the future `BluetoothOBDDataSource` from dongle+car availability: you can develop and CI-test the transport against the emulator on a laptop, then swap the underlying socket for BLE. Also a useful Plan B for car-test sessions where the real hardware turns out to be finicky on the day. Aligns with the `DataSource.EMULATOR` value already in the schema (`data/DataSource.kt`).
 
+The emulator itself landed in commit `77db981` and lives at `emulator/obd_emulator.py` with scenarios and protocol coverage documented in `emulator/README.md`. What's still open is the Android-side transport — a `TcpEmulatorOBDDataSource` (or similar) implementing the `OBDDataSource` interface against the emulator socket. That wiring is Phase 12 work and shares its structural shape with the BLE implementation below.
+
 ### BluetoothOBDDataSource
 
 The `OBDDataSource` interface and `OBDSnapshot` shape are already BLE-ready as of Phase 11A / 12-prep — suspending `readSnapshot()` returning `Result<OBDSnapshot>`, hot `connectionState` StateFlow, snapshot tagged with `DataSource.BLUETOOTH` provenance and `EngineFamily` from VIN decode. Phase 12 is the actual implementation: pairing flow, ELM327 AT command sequence, PID round-trip, DTC parsing, error handling for paired-but-not-linked / out-of-range / vehicle-ignition-off. The Python `RealOBDSource` in `reference/carcopilot_design.md §8.2` is the structural reference; the Kotlin equivalent will use BLE GATT rather than python-obd.
