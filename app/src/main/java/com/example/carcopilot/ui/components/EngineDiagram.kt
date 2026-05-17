@@ -38,15 +38,17 @@ private const val VIEW_H = 180f
  *
  * Highlight rendering is layered so a COIL_1 → SPARK_PLUG transition looks
  * like the focus drilling into the cylinder, not standing still on the
- * same shape:
+ * same shape. Labels are terse identifiers only — the AI strip body
+ * explains what the user is doing, the diagram identifies what the body
+ * is talking about:
  *   - COIL_n  → fill the 32×38 coil rectangle in accent, draw top arrow
- *               + "COIL n — REPLACE THIS" label.
+ *               + "COIL n" label.
  *   - SPARK_PLUG → small accent dot inside the cylinder 1 coil well (it
- *               always means cylinder 1 in the P0301 demo), with a "SPARK
- *               PLUG" label below the well so the eye moves further down
- *               than for the coil highlight.
+ *               always means cylinder 1 in the P0301 demo), with a "PLUG"
+ *               label below the well so the eye moves further down than
+ *               for the coil highlight.
  *   - BATTERY_NEG → accent the negative terminal of the battery silhouette
- *               at the bottom-left, with a "DISCONNECT (−)" label.
+ *               at the bottom-left, with a "(−)" label.
  *
  * Empty highlights render the diagram with no accents — a calm "this is the
  * engine bay you're working in" overview state.
@@ -213,7 +215,7 @@ fun EngineDiagram(
                 coilPrimary != null -> {
                     val arrowX = coilXs[coilPrimary - 1] + 16f
                     canvas.nativeCanvas.drawText(
-                        "COIL $coilPrimary — REPLACE THIS",
+                        "COIL $coilPrimary",
                         arrowX * sx,
                         11f * sy,
                         titlePaint,
@@ -224,7 +226,7 @@ fun EngineDiagram(
                     // Label below the coil well so the eye drops downward,
                     // distinguishing this from the coil label position.
                     canvas.nativeCanvas.drawText(
-                        "SPARK PLUG — INSIDE THE WELL",
+                        "PLUG",
                         plugLabelX * sx,
                         92f * sy,
                         titlePaint,
@@ -232,7 +234,7 @@ fun EngineDiagram(
                 }
                 batteryNegHighlighted -> {
                     canvas.nativeCanvas.drawText(
-                        "DISCONNECT (−)",
+                        "(−)",
                         78f * sx,
                         115f * sy,
                         titlePaint,
