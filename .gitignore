@@ -13,7 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
-
+.idea/
 # Gemma model files — never commit (multi-GB)
 *.litertlm
 *.task
