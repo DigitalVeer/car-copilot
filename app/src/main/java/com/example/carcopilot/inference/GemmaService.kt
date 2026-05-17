@@ -34,14 +34,22 @@ private const val TAG = "GemmaService"
 private const val METRIC_TAG = "CarCopilot"
 
 /**
- * Owns the LiteRT-LM Engine + a long-lived Conversation. Construct once per
- * process (from CarCopilotApp); never per-screen.
+ * Owns the LiteRT-LM Engine + a single Conversation slot tagged by surface.
+ * Construct once per process (from CarCopilotApp); never per-screen.
+ *
+ * LiteRT-LM 0.11.0 allows only one Conversation per Engine at a time, so the
+ * slot is multiplexed between surfaces (synthesis, draft, …) by close+recreate
+ * on surface switch — each surface gets a clean KV cache containing only the
+ * system prompt, plus an optional prewarm dummy turn on the prewarmed slot.
  *
  * Engine init kicks off lazily on construction. Once engine is ready, a
- * prewarm coroutine sends a tiny dummy message and cancels after the first
- * token to warm the system-prompt KV cache. Subsequent real synthesis calls
- * reuse the hoisted Conversation, so the system prompt's prefill is paid once
- * per process rather than per issue.
+ * prewarm coroutine creates the synthesis Conversation and sends a tiny dummy
+ * message, cancelling after the first token. Issue page is the wow-moment
+ * screen and benefits most from a warm cache; transient surfaces (mechanic
+ * draft, history) lazy-create on entry and accept the cold first-token
+ * latency. When a transient surface takes ownership, the next return to
+ * synthesis pays a fresh system-prompt prefill — acceptable given the linear
+ * demo flow.
  */
 class GemmaService(
     private val context: Context,
@@ -51,6 +59,7 @@ class GemmaService(
 
     @Volatile private var engine: Engine? = null
     @Volatile private var conversation: Conversation? = null
+    @Volatile private var currentSurface: String? = null
     private val convoMutex = Mutex()
 
     /** Set to a non-null Throwable if engine init failed; callers fall back. */
@@ -81,7 +90,7 @@ class GemmaService(
         val warmStart = System.nanoTime()
         try {
             convoMutex.withLock {
-                val convo = ensureConversationLocked() ?: return@withLock
+                val convo = acquireConversationForSurfaceLocked("synthesis") ?: return@withLock
                 // Cheapest possible full generation: send "ok", take first token, cancel.
                 // LiteRT-LM Flow does NOT auto-cancel underlying generation when the
                 // consumer stops collecting (callbackFlow.awaitClose is empty), so we
@@ -120,9 +129,12 @@ class GemmaService(
      * On any error returns a flow that emits nothing and completes — caller's
      * empty buffer will fall back via [com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE].
      *
-     * Serialized via [convoMutex] so only one synthesis runs at a time on the
-     * shared Conversation. On error, the Conversation is closed and nulled so
-     * the next call rebuilds it (preserving the Phase 5 resilience contract).
+     * Serialized via [convoMutex] so only one generation runs at a time. If the
+     * Conversation slot is currently owned by a different surface, it is
+     * closed and recreated — Phase 10A trade-off for LiteRT-LM's
+     * one-Conversation-per-Engine constraint. On error, the Conversation is
+     * closed and nulled so the next call rebuilds it (preserving the Phase 5
+     * resilience contract).
      */
     fun streamSynthesis(issue: Issue): Flow<String> = flow {
         if (engine == null) {
@@ -130,7 +142,7 @@ class GemmaService(
             return@flow
         }
         convoMutex.withLock {
-            val convo = ensureConversationLocked() ?: run {
+            val convo = acquireConversationForSurfaceLocked("synthesis") ?: run {
                 Log.w(TAG, "streamSynthesis: conversation creation failed; emitting empty")
                 return@withLock
             }
@@ -155,6 +167,7 @@ class GemmaService(
                 // Reset hoisted Conversation — it may be in a bad state.
                 try { convo.close() } catch (_: Throwable) {}
                 conversation = null
+                currentSurface = null
                 throw t
             } finally {
                 val totalMs = (System.nanoTime() - sendStart) / 1_000_000
@@ -164,14 +177,14 @@ class GemmaService(
                 val tps = if (steadyTokens > 0) steadyTokens * 1000.0 / steadyMs else 0.0
                 Log.i(
                     METRIC_TAG,
-                    "infer model=${BuildConfig.MODEL_VARIANT} first_token=${firstMs}ms " +
-                        "total=${totalMs}ms tokens=$tokenCount tps=${"%.2f".format(tps)}" +
-                        (if (failed) " failed=true" else "")
+                    "infer surface=synthesis model=${BuildConfig.MODEL_VARIANT} " +
+                        "first_token=${firstMs}ms total=${totalMs}ms tokens=$tokenCount " +
+                        "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
                 )
                 if (!failed) {
                     Log.i(
                         METRIC_TAG,
-                        "infer_raw model=${BuildConfig.MODEL_VARIANT} text=${
+                        "infer_raw surface=synthesis model=${BuildConfig.MODEL_VARIANT} text=${
                             rawBuf.toString().replace("\n", "\\n").replace("\r", "")
                         }"
                     )
@@ -180,9 +193,89 @@ class GemmaService(
         }
     }.flowOn(Dispatchers.IO)
 
-    /** Build the hoisted Conversation if missing. Must be called under [convoMutex]. */
-    private fun ensureConversationLocked(): Conversation? {
-        conversation?.let { return it }
+    /**
+     * Streams the mechanic-draft assistant response as per-token deltas,
+     * parallel in shape to [streamSynthesis]. The caller appends. On any error
+     * returns a flow that emits nothing and completes — caller's empty buffer
+     * will fall back via [com.example.carcopilot.model.Issue.mechanicDraft].
+     *
+     * Lazy-creates the draft Conversation on first entry; if the slot is
+     * currently owned by synthesis, closes it and recreates fresh. First-token
+     * latency therefore includes a cold system-prompt prefill the first time
+     * the user navigates here in a session.
+     */
+    fun streamMechanicDraft(issue: Issue): Flow<String> = flow {
+        if (engine == null) {
+            Log.w(TAG, "streamMechanicDraft: engine not initialized; emitting empty")
+            return@flow
+        }
+        convoMutex.withLock {
+            val convo = acquireConversationForSurfaceLocked("draft") ?: run {
+                Log.w(TAG, "streamMechanicDraft: conversation creation failed; emitting empty")
+                return@withLock
+            }
+            val sendStart = System.nanoTime()
+            var firstTokenNs: Long = -1
+            var tokenCount = 0
+            val rawBuf = StringBuilder()
+            var failed = false
+            try {
+                convo.sendMessageAsync(promptBuilder.renderMechanicDraftPrompt(issue))
+                    .collect { message ->
+                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
+                        tokenCount += 1
+                        val s = message.toString()
+                        rawBuf.append(s)
+                        emit(s)
+                    }
+            } catch (t: Throwable) {
+                failed = true
+                Log.w(TAG, "streamMechanicDraft collect: ${t.javaClass.simpleName}: ${t.message}")
+                try { convo.close() } catch (_: Throwable) {}
+                conversation = null
+                currentSurface = null
+                throw t
+            } finally {
+                val totalMs = (System.nanoTime() - sendStart) / 1_000_000
+                val firstMs = if (firstTokenNs > 0) (firstTokenNs - sendStart) / 1_000_000 else -1L
+                val steadyTokens = (tokenCount - 1).coerceAtLeast(0)
+                val steadyMs = (totalMs - firstMs).coerceAtLeast(1)
+                val tps = if (steadyTokens > 0) steadyTokens * 1000.0 / steadyMs else 0.0
+                Log.i(
+                    METRIC_TAG,
+                    "infer surface=draft model=${BuildConfig.MODEL_VARIANT} " +
+                        "first_token=${firstMs}ms total=${totalMs}ms tokens=$tokenCount " +
+                        "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
+                )
+                if (!failed) {
+                    Log.i(
+                        METRIC_TAG,
+                        "infer_raw surface=draft model=${BuildConfig.MODEL_VARIANT} text=${
+                            rawBuf.toString().replace("\n", "\\n").replace("\r", "")
+                        }"
+                    )
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
+     * Return the Conversation owned by [surface], creating it if the slot is
+     * empty or held by a different surface. Must be called under [convoMutex].
+     *
+     * On surface switch, the existing Conversation is closed before the new
+     * one is allocated — LiteRT-LM 0.11.0 rejects a second createConversation
+     * while another session is open with FAILED_PRECONDITION.
+     */
+    private fun acquireConversationForSurfaceLocked(surface: String): Conversation? {
+        val existing = conversation
+        if (existing != null && currentSurface == surface) return existing
+        if (existing != null) {
+            try { existing.close() } catch (_: Throwable) {}
+            conversation = null
+            currentSurface = null
+            Log.i(TAG, "conversation closed for surface switch → $surface")
+        }
         val e = engine ?: return null
         return try {
             val c = e.createConversation(
@@ -192,10 +285,11 @@ class GemmaService(
                 )
             )
             conversation = c
-            Log.i(TAG, "conversation created")
+            currentSurface = surface
+            Log.i(TAG, "conversation[$surface] created")
             c
         } catch (t: Throwable) {
-            Log.w(TAG, "createConversation: ${t.javaClass.simpleName}: ${t.message}")
+            Log.w(TAG, "createConversation[$surface]: ${t.javaClass.simpleName}: ${t.message}")
             null
         }
     }

@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,18 +27,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.getSystemService
+import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.Severity
 import com.example.carcopilot.ui.components.BottomTabBar
 import com.example.carcopilot.ui.components.Tab
+import com.example.carcopilot.ui.components.ThinkingDots
 import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
 import com.example.carcopilot.ui.theme.CarCopilotColors
@@ -45,12 +55,43 @@ import com.example.carcopilot.ui.theme.CarCopilotTypography
 @Composable
 fun MechanicDraftScreen(
     issue: Issue,
+    gemma: GemmaService,
     onBack: () -> Unit,
     onHomeTab: () -> Unit,
     onHistoryTab: () -> Unit,
 ) {
     val context = LocalContext.current
-    val draft = issue.mechanicDraft.orEmpty()
+    val fallbackDraft = issue.mechanicDraft.orEmpty()
+    var state by remember { mutableStateOf<MechanicDraftState>(MechanicDraftState.Thinking) }
+
+    LaunchedEffect(issue.id) {
+        gemma.awaitReady()
+        if (gemma.initError != null) {
+            state = MechanicDraftState.Ready(draft = fallbackDraft, isFallback = true)
+            return@LaunchedEffect
+        }
+        val buf = StringBuilder()
+        try {
+            gemma.streamMechanicDraft(issue).collect { delta ->
+                buf.append(delta)
+                val progress = extractDraftInProgress(buf.toString())
+                if (progress.partial.isNotEmpty()) {
+                    state = MechanicDraftState.Streaming(progress.partial)
+                }
+            }
+            state = if (buf.isEmpty()) {
+                MechanicDraftState.Ready(draft = fallbackDraft, isFallback = true)
+            } else {
+                parseDraftOrFallback(buf.toString(), fallbackDraft)
+            }
+        } catch (_: Throwable) {
+            state = MechanicDraftState.Ready(draft = fallbackDraft, isFallback = true)
+        }
+    }
+
+    val ctasEnabled = state is MechanicDraftState.Ready
+    val readyDraft = (state as? MechanicDraftState.Ready)?.draft.orEmpty()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,17 +114,19 @@ fun MechanicDraftScreen(
                 label = "Drafted for you",
                 severity = Severity.warning,
             )
-            DraftCard(draft = draft)
+            DraftCard(state = state)
             Spacer(Modifier.height(20.dp))
             PrimaryCta(
                 label = "Looks good — open Messages →",
-                onClick = { shareDraft(context, draft) },
+                enabled = ctasEnabled,
+                onClick = { shareDraft(context, readyDraft) },
             )
             Spacer(Modifier.height(10.dp))
             GhostCta(
                 label = "Edit before sending",
+                enabled = ctasEnabled,
                 onClick = {
-                    copyDraft(context, draft)
+                    copyDraft(context, readyDraft)
                     Toast.makeText(
                         context,
                         "Copied — paste it somewhere you can edit.",
@@ -105,7 +148,7 @@ fun MechanicDraftScreen(
 }
 
 @Composable
-private fun DraftCard(draft: String) {
+private fun DraftCard(state: MechanicDraftState) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -123,11 +166,26 @@ private fun DraftCard(draft: String) {
                 .background(CarCopilotColors.Line),
         )
         Spacer(Modifier.height(14.dp))
-        Text(
-            text = draft,
-            style = CarCopilotTypography.CardSubtitle.copy(lineHeight = 22.4.sp),
-            color = CarCopilotColors.Text,
-        )
+        Crossfade(
+            targetState = state is MechanicDraftState.Thinking,
+            animationSpec = tween(durationMillis = 200),
+            label = "draft-body",
+        ) { thinking ->
+            if (thinking) {
+                ThinkingDots(Severity.warning)
+            } else {
+                val text = when (state) {
+                    is MechanicDraftState.Thinking -> ""
+                    is MechanicDraftState.Streaming -> state.partial
+                    is MechanicDraftState.Ready -> state.draft
+                }
+                Text(
+                    text = text,
+                    style = CarCopilotTypography.CardSubtitle.copy(lineHeight = 22.4.sp),
+                    color = CarCopilotColors.Text,
+                )
+            }
+        }
     }
 }
 
@@ -174,13 +232,14 @@ private fun DraftMetaRow() {
 }
 
 @Composable
-private fun PrimaryCta(label: String, onClick: () -> Unit) {
+private fun PrimaryCta(label: String, enabled: Boolean, onClick: () -> Unit) {
+    val base = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(10.dp))
+        .background(CarCopilotColors.Accent)
+        .alpha(if (enabled) 1f else 0.4f)
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(CarCopilotColors.Accent)
-            .clickable(onClick = onClick)
+        modifier = (if (enabled) base.clickable(onClick = onClick) else base)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -194,13 +253,14 @@ private fun PrimaryCta(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun GhostCta(label: String, onClick: () -> Unit) {
+private fun GhostCta(label: String, enabled: Boolean, onClick: () -> Unit) {
+    val base = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(10.dp))
+        .border(1.dp, CarCopilotColors.LineBright, RoundedCornerShape(10.dp))
+        .alpha(if (enabled) 1f else 0.4f)
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, CarCopilotColors.LineBright, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
+        modifier = (if (enabled) base.clickable(onClick = onClick) else base)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -214,6 +274,7 @@ private fun GhostCta(label: String, onClick: () -> Unit) {
 }
 
 private fun shareDraft(context: Context, draft: String) {
+    if (draft.isEmpty()) return
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, draft)
@@ -222,6 +283,7 @@ private fun shareDraft(context: Context, draft: String) {
 }
 
 private fun copyDraft(context: Context, draft: String) {
+    if (draft.isEmpty()) return
     val clipboard = context.getSystemService<ClipboardManager>() ?: return
     clipboard.setPrimaryClip(ClipData.newPlainText("Mechanic draft", draft))
 }

@@ -7,13 +7,16 @@ import com.example.carcopilot.model.LiveReading
 import com.example.carcopilot.model.LiveStatus
 
 /**
- * Reads system.md and issue_synthesis.md from assets and fills the template.
- * Mirrors gemma_adapter._render_template + _format_dtcs + _format_readings.
+ * Reads system.md, issue_synthesis.md, and mechanic_draft.md from assets and
+ * fills the templates. Mirrors gemma_adapter._render_template +
+ * _format_dtcs + _format_readings.
  */
 class PromptBuilder(context: Context) {
     val systemPrompt: String = context.assets.open("system.md").bufferedReader().use { it.readText() }
     private val synthesisTemplate: String =
         context.assets.open("issue_synthesis.md").bufferedReader().use { it.readText() }
+    private val mechanicDraftTemplate: String =
+        context.assets.open("mechanic_draft.md").bufferedReader().use { it.readText() }
 
     fun renderSynthesisPrompt(issue: Issue, language: String = "en"): String =
         synthesisTemplate
@@ -27,6 +30,16 @@ class PromptBuilder(context: Context) {
             .replace("{cost_max}", issue.meta.costUsdMax?.toString() ?: "—")
             .replace("{time_minutes}", issue.meta.timeMinutes?.toString() ?: "—")
             .replace("{drivability}", issue.meta.drivability ?: "—")
+            .replace("{dtcs}", formatDtcs(issue.dtcs))
+            .replace("{live_readings}", formatReadings(issue.liveReadings))
+            .replace("{language}", language)
+
+    fun renderMechanicDraftPrompt(issue: Issue, language: String = "en"): String =
+        mechanicDraftTemplate
+            .replace("{vehicle}", issue.vehicle.displayName)
+            .replace("{mileage}", issue.vehicle.mileage?.toString() ?: "unknown")
+            .replace("{title}", issue.title)
+            .replace("{subtitle}", issue.subtitle)
             .replace("{dtcs}", formatDtcs(issue.dtcs))
             .replace("{live_readings}", formatReadings(issue.liveReadings))
             .replace("{language}", language)

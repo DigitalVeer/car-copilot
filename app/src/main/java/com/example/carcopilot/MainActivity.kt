@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
                         composable("draft") {
                             MechanicDraftScreen(
                                 issue = misfire,
+                                gemma = gemma,
                                 onBack = { nav.popBackStack() },
                                 onHomeTab = toHome,
                                 onHistoryTab = toHistory,
