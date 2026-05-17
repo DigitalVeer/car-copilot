@@ -30,17 +30,17 @@ The server prints connection lifecycle messages to stdout. Ctrl+C to stop.
 |-----|---------|----------------|-------------------|
 | `corolla` (default) | 2009 Toyota Corolla 1ZZ-FE petrol | P0171 | Lean condition: low MAF (1.85 g/s), +18% LTFT, lean upstream O2 (0.2V) |
 | `hilux` | 2008 Toyota Hilux 2KD-FTV diesel | P0087, P1229 | Fuel rail pressure low: 28,000 kPa vs ~34,500 kPa target, fault confirmed in freeze frame at 23,940 kPa |
+| `misfire` | 2014 Toyota Camry 2AR-FE petrol | P0301 | Cylinder 1 misfire: rough idle at 680 rpm, +8% STFT, lean upstream O2 (0.15V); fault set in freeze frame at 2200 rpm / 55% load. Matches `app/src/main/assets/misfire.json`. |
 
-Each scenario carries confirmed/pending/permanent DTC lists, a Mode 01 live-PID table, and a Mode 02 freeze-frame snapshot tied to the primary DTC.
-
-Note: neither scenario matches the current P0301 misfire fixture used by the Android demo (`app/src/main/assets/misfire.json`). When Phase-12 transport wiring lands, we'll either add a misfire scenario here or extend `DTCTable` to cover P0171 / P0087 — a separate decision tracked alongside the RAG-backed DTC table work in `FUTURE_WORK.md`.
+Each scenario carries confirmed/pending/permanent DTC lists, a Mode 01 live-PID table, a Mode 02 freeze-frame snapshot tied to the primary DTC, and a 17-character VIN for Mode 09 PID 02.
 
 ## Protocol coverage
 
 - **AT handshake:** `ATZ`, `ATWS`, `ATE0`/`ATE1` (echo), `ATH0`/`ATH1` (headers), `ATSP0`, `ATRV` (battery), `ATI`, `AT@1`. Unknown AT commands return `OK`.
-- **Mode 01** — live PIDs (RPM, coolant, load, speed, throttle, IAT, MAF, STFT/LTFT B1, O2 voltages, rail pressure, battery). Unknown PIDs return `NO DATA`.
+- **Mode 01** — live PIDs (RPM, coolant, load, speed, throttle, IAT, MAF, STFT/LTFT B1, O2 voltages, rail pressure, battery). PIDs `00` / `20` / `40` return the SAE J1979 supported-PIDs bitmap, computed from each scenario's actual PID coverage. Unknown PIDs return `NO DATA`.
 - **Mode 02** — freeze-frame data for the scenario's primary DTC.
 - **Mode 03 / 07 / 0A** — confirmed / pending / permanent DTCs, J1979 two-byte encoded.
+- **Mode 09** — PID `00` (supported info-types) advertises only PID `02`; PID `02` returns the scenario's VIN as an ELM327-style multi-line response (`014` header + `0:` / `1:` / `2:` lines, ATH0 format). Other Mode 09 PIDs return `NO DATA`.
 
 Echo and headers state are tracked per session and respected on every response. Mode 04 (clear DTCs) is intentionally not implemented — the Android app does not expose it.
 

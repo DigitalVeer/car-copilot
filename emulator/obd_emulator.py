@@ -42,6 +42,7 @@ PORT = 35000
 SCENARIOS = {
     "corolla": {
         "name": "2009 Toyota Corolla 1ZZ-FE petrol — P0171 lean condition",
+        "vin":  "JTDBR32E390123456",
         "confirmed_dtcs": ["P0171"],
         "pending_dtcs":   [],
         "permanent_dtcs": ["P0171"],
@@ -74,6 +75,7 @@ SCENARIOS = {
 
     "hilux": {
         "name": "2008 Toyota Hilux 2KD-FTV diesel — P0087 fuel rail pressure low",
+        "vin":  "MR0HZ3CDX00123456",
         "confirmed_dtcs": ["P0087", "P1229"],
         "pending_dtcs":   ["P0087"],
         "permanent_dtcs": ["P0087"],
@@ -98,7 +100,95 @@ SCENARIOS = {
             },
         },
     },
+
+    "misfire": {
+        "name": "2014 Toyota Camry 2AR-FE petrol — P0301 cylinder 1 misfire",
+        "vin":  "4T1BF1FK0EU123456",
+        "confirmed_dtcs": ["P0301"],
+        "pending_dtcs":   ["P0301"],
+        "permanent_dtcs": ["P0301"],
+        "pids": {
+            "0C": "0A A0",   # RPM 680 (rough idle)
+            "05": "83",      # Coolant 91°C
+            "04": "47",      # Load 28%
+            "0D": "00",      # Speed 0
+            "11": "29",      # Throttle 16%
+            "0F": "43",      # IAT 27°C
+            "10": "01 5E",   # MAF 3.50 g/s
+            "06": "8A",      # STFT B1 +8% (compensating for misfire)
+            "07": "88",      # LTFT B1 +6%
+            "14": "1E FF",   # O2 S1 0.15V (lean spikes from unburned air)
+            "15": "8C FF",   # O2 S2 0.70V
+            "42": "37 14",   # Battery 14.1V (engine running, alternator)
+        },
+        "freeze_frame": {
+            "dtc": "P0301",
+            "pids": {
+                "0C": "22 60",   # RPM 2200 (fault set under load)
+                "05": "82",      # Coolant 90°C
+                "04": "8C",      # Load 55%
+                "0D": "32",      # Speed 50 kph
+                "11": "51",      # Throttle 32%
+                "10": "03 B6",   # MAF 9.50 g/s
+            },
+        },
+    },
 }
+
+
+# ── Supported-PID bitmap (Mode 01 PIDs 00 / 20 / 40) ──────────────────────────
+#
+# SAE J1979: querying PID 00/20/40 returns a 4-byte bitmap covering the next
+# 32 PIDs. Bit 7 of byte A = PID (start+1), …, bit 0 of byte D = PID (start+0x20).
+# The LSB of byte D is the continuation flag — set if any PIDs above the
+# range are supported (i.e., the next bitmap query is valid).
+
+def compute_supported_pids(pid_keys: list, start_hex: int) -> str:
+    """Return a J1979 4-byte support bitmap (hex, space-separated) for the
+    range (start_hex, start_hex + 0x20]. Sets the continuation LSB if any
+    PIDs above the range exist."""
+    bits = 0
+    for pid_str in pid_keys:
+        pid = int(pid_str, 16)
+        if start_hex < pid <= start_hex + 0x20:
+            offset = pid - start_hex - 1   # 0..31
+            bits |= 1 << (31 - offset)
+    if any(int(p, 16) > start_hex + 0x20 for p in pid_keys):
+        bits |= 1
+    return (f"{(bits >> 24) & 0xFF:02X} {(bits >> 16) & 0xFF:02X} "
+            f"{(bits >> 8) & 0xFF:02X} {bits & 0xFF:02X}")
+
+
+def populate_supported_pid_bitmaps(scenario: dict) -> None:
+    """Inject Mode 01 PID 00 / 20 / 40 entries into the scenario's pids dict,
+    computed from the scenario's actual PID coverage. Idempotent."""
+    data_keys = [k for k in scenario["pids"].keys() if k not in ("00", "20", "40")]
+    for start_hex, key in ((0x00, "00"), (0x20, "20"), (0x40, "40")):
+        in_range = any(start_hex < int(p, 16) <= start_hex + 0x20 for p in data_keys)
+        above    = any(int(p, 16) > start_hex + 0x20 for p in data_keys)
+        if in_range or above:
+            scenario["pids"][key] = compute_supported_pids(data_keys, start_hex)
+
+
+# ── Mode 09 VIN encoding (PID 0902) ───────────────────────────────────────────
+#
+# ELM327 v1.5 with ATH0 emits the VIN as a multi-line response:
+#
+#   014                          ← 0x14 = 20 bytes of payload (3 header + 17 VIN)
+#   0: 49 02 01 V1 V2 V3
+#   1: V4 V5 V6 V7 V8 V9 V10
+#   2: V11 V12 V13 V14 V15 V16 V17
+
+def encode_vin_response(vin: str) -> str:
+    if len(vin) != 17:
+        raise ValueError(f"VIN must be 17 chars, got {len(vin)}: {vin!r}")
+    b = [f"{ord(c):02X}" for c in vin]
+    return "\r".join([
+        "014",
+        "0: 49 02 01 " + " ".join(b[0:3]),
+        "1: "         + " ".join(b[3:10]),
+        "2: "         + " ".join(b[10:17]),
+    ])
 
 
 # ── DTC encoding ──────────────────────────────────────────────────────────────
@@ -165,6 +255,18 @@ class ELM327Session:
             data = ff.get("pids", {}).get(pid)
             if data:
                 self.send(self._wrap(f"42 {pid} 00 {data}"))
+            else:
+                self.send("NO DATA")
+        elif mode == "09":
+            if pid == "00":
+                # Only 0902 (VIN) implemented → bit 6 of byte A set (PID 02)
+                self.send(self._wrap("49 00 40 00 00 00"))
+            elif pid == "02":
+                vin = self.scenario.get("vin")
+                if vin:
+                    self.send(encode_vin_response(vin))
+                else:
+                    self.send("NO DATA")
             else:
                 self.send("NO DATA")
         else:
@@ -245,6 +347,7 @@ def main():
         return
 
     scenario = SCENARIOS[args.scenario]
+    populate_supported_pid_bitmaps(scenario)
     print(f"Car Copilot OBD Emulator")
     print(f"  scenario : {scenario['name']}")
     print(f"  DTCs     : {scenario['confirmed_dtcs']}")

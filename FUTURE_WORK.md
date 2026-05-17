@@ -77,22 +77,7 @@ Surfaced from Will's `will/dev` branch alongside the `VehicleState` schema work 
 
 Will's idea — a small Python server that speaks ELM327 over a TCP socket, with the Android app connecting via WiFi instead of Bluetooth. Decouples the future `BluetoothOBDDataSource` from dongle+car availability: you can develop and CI-test the transport against the emulator on a laptop, then swap the underlying socket for BLE. Also a useful Plan B for car-test sessions where the real hardware turns out to be finicky on the day. Aligns with the `DataSource.EMULATOR` value already in the schema (`data/DataSource.kt`).
 
-The emulator itself landed in commit `77db981` and lives at `emulator/obd_emulator.py` with scenarios and protocol coverage documented in `emulator/README.md`. What's still open is the Android-side transport — a `TcpEmulatorOBDDataSource` (or similar) implementing the `OBDDataSource` interface against the emulator socket. That wiring is Phase 12 work and shares its structural shape with the BLE implementation below.
-
-### Emulator gaps surfaced by verification
-
-A standalone end-to-end exercise of `emulator/obd_emulator.py` — AT commands driven from a Python TCP probe, no Android client — confirmed the emulator boots cleanly, the AT handshake and Modes 01/03 behave correctly per scenario, and the DTC list swaps with `--scenario`. Three gaps to triage before Phase 12A's `TcpEmulatorOBDDataSource` leans on it:
-
-- **Mode 01 PID `00` (supported-PIDs bitmap) returns `NO DATA`.** Neither scenario lists PID `00` in its `pids` dict, so the exact-lookup path in `ELM327Session.handle` falls through to `NO DATA`. Real ELM327 clients commonly lead with `0100` to confirm the link and learn the supported-PID mask before requesting any data PID — likely to confuse Phase-12A transport bringup. Cheap fix: precompute the bitmap from each scenario's PID keys (or short-circuit `0100` to a known-good mask) and emit it for `0100` / `0120` / `0140`.
-
-- **Mode 09 (VIN / vehicle info) unimplemented.** The mode dispatcher only handles 01/02/03/07/0A and returns `?` for everything else; `emulator/README.md`'s "Protocol coverage" section omits Mode 09 by design. Matters only when the Android side wants VIN-derived `OBDSnapshot.engineFamily`. Lower priority — defer until BLE transport actually reads VIN.
-
-- **Scenarios emit P0171 / P0087, not P0301.** Neither emulator scenario (`corolla` → P0171, `hilux` → P0087 + P1229) matches `app/src/main/assets/misfire.json`'s P0301. `emulator/README.md` already calls this disjoint out. Three resolution paths to pick between when Phase-12A wiring lands:
-  1. **Add a `misfire` scenario to the emulator.** Returns P0301 plus misfire-shaped live readings. Keeps the existing Android demo flow working end-to-end through the emulator path with no Android-side changes.
-  2. **Extend `DTCTable` to cover P0171 (and P0087).** Reuses the existing emulator scenarios as the primary demo content. Opens the question of whether `misfire.json` stays as a separate fixture path or gets replaced. Pairs naturally with the RAG-backed DTC table item above.
-  3. **Both.** Add a misfire scenario *and* expand `DTCTable` via the RAG-backed catalogue. The catalogue grows to real breadth while the emulator continues to drive the existing demo end-to-end. Most work, least lock-in.
-
-This isn't urgent before Phase 12A starts — the emulator is internally consistent and useful as-is for transport-layer development — but the `0100` gap will surface the first time the Android side issues a handshake.
+The emulator itself landed in commit `77db981` and lives at `emulator/obd_emulator.py` with scenarios and protocol coverage documented in `emulator/README.md`. A follow-up pass closed three gaps a standalone verification surfaced: Mode 01 supported-PIDs bitmaps (`0100` / `0120` / `0140`) are now computed per scenario; Mode 09 PID 02 (VIN) is wired up in ELM327 multi-line format with a per-scenario 17-char VIN; and a `misfire` scenario emits P0301 plus misfire-shaped live readings, matching `app/src/main/assets/misfire.json` end-to-end. What's still open is the Android-side transport — a `TcpEmulatorOBDDataSource` (or similar) implementing the `OBDDataSource` interface against the emulator socket. That wiring is Phase 12 work and shares its structural shape with the BLE implementation below.
 
 ### BluetoothOBDDataSource
 
