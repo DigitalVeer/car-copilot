@@ -83,6 +83,10 @@ The emulator itself landed in commit `77db981` and lives at `emulator/obd_emulat
 
 The `OBDDataSource` interface and `OBDSnapshot` shape are already BLE-ready as of Phase 11A / 12-prep — suspending `readSnapshot()` returning `Result<OBDSnapshot>`, hot `connectionState` StateFlow, snapshot tagged with `DataSource.BLUETOOTH` provenance and `EngineFamily` from VIN decode. Phase 12 is the actual implementation: pairing flow, ELM327 AT command sequence, PID round-trip, DTC parsing, error handling for paired-but-not-linked / out-of-range / vehicle-ignition-off. The Python `RealOBDSource` in `reference/carcopilot_design.md §8.2` is the structural reference; the Kotlin equivalent will use BLE GATT rather than python-obd.
 
+### feat/bluetooth-obd branch (audited, awaiting rebase)
+
+Will's branch ships a clean ELM327 transport layer (`BluetoothOBDDataSource` Classic SPP + `TcpOBDDataSource` for emulator dev) sharing an `Elm327Protocol.kt` module. Transport code is merge-shaped against the `OBDDataSource` interface. Merge blocked by: `MainActivity` restructure conflicting with W1/W2 `WalkthroughScreen` signature; missing `usesPermissionFlags="neverForLocation"` on `BLUETOOTH_SCAN`; default build flag flipped to `BLUETOOTH`; stray product-rebrand doc at repo root; blank-screen fail mode on null Issue. Path forward: Will rebases onto post-W2 main, drops the product doc, fixes the manifest flag, gates `BLUETOOTH` branch around existing NavHost. Audit details in audit-bt commit message.
+
 ## Known model behaviors
 
 ### Gemma 4 E4B numeric-token hallucination on simple integer+unit patterns
