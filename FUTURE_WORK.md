@@ -1,6 +1,35 @@
 # Post-hackathon follow-ups
 
-A running list of work that's *not* in scope before the demo but is worth coming back to. Phase 5 is locked; the demo ships Monday. Everything below is exploratory.
+A running list of work that's *not* in scope before the demo but is worth coming back to. Phase 5 is locked; the demo ships Monday. Most items below are exploratory; **demo-day risks are flagged at the top**.
+
+## Demo-day risk: native instability on rapid surface churn
+
+The LiteRT-LM 0.11.0 native library can SIGSEGV when the user navigates between Issue / Walkthrough / Mechanic / History faster than in-flight prefills complete. This is a real risk for the recording — a tap-happy demo runner can hard-crash the app.
+
+**Crash signature.** `Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0` (null pointer dereference) on a `Thread-N` native worker, with the entire backtrace inside `liblitertlm_jni.so`:
+
+```
+#00 pc 00000000004c9060  liblitertlm_jni.so
+#01 pc 0000000000704de4  liblitertlm_jni.so
+#02 pc 0000000000732aa8  liblitertlm_jni.so
+#03 pc 0000000000733398  liblitertlm_jni.so
+#04 pc 000000000008a714  libc.so (__pthread_start)
+```
+
+The fatal frame is 12ms after `RunPrefillAsync status: OK` in the engine log — the crash is inside prefill execution, not at session creation.
+
+**Trigger.** Open Issue → tap Mechanic before synthesis completes → tap back before draft completes → tap Mechanic again → repeat. Each transition closes one Conversation and opens a new one against the same Engine; after a few cycles of cancel-mid-prefill + reopen, the native side loses a pointer. Heavy GPU stalls (`Skipped 200+ frames`, `Davey! duration=6649ms`) typically precede the crash by a second or two.
+
+**Pre-existing.** Reproduces on commit 993960e (the locked Phase-10B HEAD, before any Phase 11 refactor work). Verified by checking out 993960e, rebuilding, and running the same rapid-nav pattern with `adb shell input` — same SIGSEGV signature, same native-only backtrace. The Phase 11 fixture-seam refactor is exonerated; this is a LiteRT-LM 0.11.0 issue exposed by Phase 10A's surface-multiplexing workaround for the single-Conversation-per-Engine constraint.
+
+**Demo workaround.** Linear navigation: don't back-button out of Issue / Mechanic / Walkthrough until the streaming animation has completed (`Ready` state, not `Streaming`). If recording the video, give each surface ~30s end-to-end. The crash is timing-dependent — it doesn't fire if prefills are allowed to finish.
+
+**Proper fix direction.**
+- **Serialize surface-switch requests behind a queue in `GemmaService`.** Today's flow calls `Conversation.close()` + `engine.createConversation()` synchronously on the UI's request even if a prefill is still running on the previous Conversation; the SDK's cancellation path (`cancelProcess` → `CANCELLED: Process cancelled`) does not fully quiesce the prefill thread before close. A surface-switch queue that waits for the in-flight prefill to acknowledge cancellation before closing should remove the use-after-free window.
+- **Upgrade SDK if a later LiteRT-LM release lifts the single-Conversation-per-Engine constraint.** Per the existing follow-up under Phase 8, 0.11.0 rejects a second `createConversation` while another session is open. If parallel Conversations per surface become possible, the close-during-prefill race goes away entirely.
+- **Disable mid-stream cancellation as a backstop.** Block back navigation while the AI strip is in `Streaming` state (with a visible affordance — "still thinking…"). Cheap to implement; degrades UX but eliminates the crash window without depending on SDK behavior.
+
+Owner: open. Priority: P0 until the demo ships, P1 after.
 
 ## Performance
 
