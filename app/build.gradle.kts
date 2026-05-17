@@ -27,6 +27,26 @@ android {
             "modelVariant must be E4B or E2B, got: $modelVariant"
         }
         buildConfigField("String", "MODEL_VARIANT", "\"$modelVariant\"")
+
+        // OBD data source: FIXTURE (default — the locked demo path), EMULATOR
+        // (TcpOBDDataSource → Python emulator over WiFi), BLUETOOTH
+        // (BluetoothOBDDataSource → paired ELM327 dongle over Classic SPP).
+        // Usage:
+        //   ./gradlew assembleDebug                          # FIXTURE (demo build)
+        //   ./gradlew assembleDebug -PdataSource=EMULATOR
+        //   ./gradlew assembleDebug -PdataSource=EMULATOR -PobdHost=192.168.1.5
+        //   ./gradlew assembleDebug -PdataSource=BLUETOOTH
+        val dataSource = (project.findProperty("dataSource") as? String) ?: "FIXTURE"
+        require(dataSource in setOf("FIXTURE", "EMULATOR", "BLUETOOTH")) {
+            "dataSource must be FIXTURE, EMULATOR, or BLUETOOTH, got: $dataSource"
+        }
+        buildConfigField("String", "DATA_SOURCE", "\"$dataSource\"")
+
+        // EMULATOR-only: where the Python emulator socket lives. Android
+        // emulator → Mac localhost is 10.0.2.2. On a real device over WiFi,
+        // use the host machine's LAN IP, e.g. -PobdHost=192.168.1.5.
+        val obdHost = (project.findProperty("obdHost") as? String) ?: "10.0.2.2"
+        buildConfigField("String", "OBD_EMULATOR_HOST", "\"$obdHost\"")
     }
 
     buildTypes {

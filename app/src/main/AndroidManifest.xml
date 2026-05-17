@@ -2,6 +2,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- TCP socket for the Python OBD emulator (dataSource=EMULATOR builds). -->
+    <!-- AI inference stays on-device; no Gemma request ever leaves the phone. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Classic Bluetooth SPP transport for paired ELM327 dongles. -->
+    <!-- API 31+ (S): runtime permissions. neverForLocation on SCAN is a hard -->
+    <!-- promise to the OS that scan results are never used to derive physical -->
+    <!-- location — keeps us inside the no-location-services constraint. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <!-- API ≤30 (R): install-time permissions for the same surface. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
     <application
         android:name=".CarCopilotApp"
         android:allowBackup="true"
