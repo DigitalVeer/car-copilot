@@ -27,6 +27,19 @@ android {
             "modelVariant must be E4B or E2B, got: $modelVariant"
         }
         buildConfigField("String", "MODEL_VARIANT", "\"$modelVariant\"")
+
+        // OBD data source: FIXTURE (default), EMULATOR (TCP WiFi), BLUETOOTH
+        // Usage: ./gradlew assembleDebug -PdataSource=EMULATOR
+        val dataSource = (project.findProperty("dataSource") as? String) ?: "FIXTURE"
+        require(dataSource in setOf("FIXTURE", "EMULATOR", "BLUETOOTH")) {
+            "dataSource must be FIXTURE, EMULATOR, or BLUETOOTH"
+        }
+        buildConfigField("String", "DATA_SOURCE", "\"$dataSource\"")
+
+        // Android emulator → Mac localhost: 10.0.2.2
+        // Real device on same WiFi: Mac's LAN IP, e.g. ./gradlew ... -PobdHost=192.168.1.5
+        val obdHost = (project.findProperty("obdHost") as? String) ?: "10.0.2.2"
+        buildConfigField("String", "OBD_EMULATOR_HOST", "\"$obdHost\"")
     }
 
     buildTypes {
