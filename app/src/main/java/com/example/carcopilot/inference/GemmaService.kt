@@ -435,10 +435,18 @@ class GemmaService(
      * [com.example.carcopilot.model.WalkthroughStep.body] from
      * [com.example.carcopilot.data.DTCEntry.walkthroughSteps].
      *
-     * Shares surface tag `walkthrough` with [streamWalkthroughPlan] so
-     * successive step calls reuse the Conversation and KV cache. The first
-     * step pays a fresh system-prompt + plan prefill if the slot was held
-     * by another surface; subsequent steps pay only their own prefill.
+     * Tags the surface as `walkthrough_step_${planStep.number}` so each
+     * step forces a Conversation close+recreate vs. the prior plan or step
+     * call. The W1 design shared the surface tag `walkthrough` across plan
+     * and steps to reuse KV cache, but Pixel 9 + E4B + GPU empirically
+     * fails on step-1's invocation when the plan turn (≈1200 token input +
+     * ≈150 token output) is still in KV — the compiled model executor
+     * throws `Status Code: 13 Failed to invoke the compiled model` at
+     * llm_litert_compiled_model_executor.cc:756. Fresh convo per step
+     * gives each call only the system prompt in KV, comfortably fitting
+     * the compiled model's effective context cap. The trade-off is one
+     * extra system-prompt prefill (~250 tokens, ~1s) and one
+     * NATIVE_SETTLE_MS wait per step.
      */
     fun streamWalkthroughStep(
         issue: Issue,
@@ -450,7 +458,8 @@ class GemmaService(
             return@flow
         }
         convoMutex.withLock {
-            val convo = acquireConversationForSurfaceLocked("walkthrough") ?: run {
+            val surfaceTag = "walkthrough_step_${planStep.number}"
+            val convo = acquireConversationForSurfaceLocked(surfaceTag) ?: run {
                 Log.w(TAG, "streamWalkthroughStep: conversation creation failed; emitting empty")
                 return@withLock
             }

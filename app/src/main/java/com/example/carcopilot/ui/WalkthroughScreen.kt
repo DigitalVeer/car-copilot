@@ -1,5 +1,7 @@
 package com.example.carcopilot.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,11 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -35,6 +35,7 @@ import com.example.carcopilot.data.DiagramTarget
 import com.example.carcopilot.data.highlightsForPlanStep
 import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Issue
+import com.example.carcopilot.model.Severity
 import com.example.carcopilot.model.WalkthroughStep
 import com.example.carcopilot.ui.components.BottomTabBar
 import com.example.carcopilot.ui.components.EngineDiagram
@@ -43,42 +44,46 @@ import com.example.carcopilot.ui.components.StepProgress
 import com.example.carcopilot.ui.components.Tab
 import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
+import com.example.carcopilot.ui.components.WalkthroughLoadingPage
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+
+private const val GENERIC_STEP_FALLBACK =
+    "Snug what you opened, reconnect what you unplugged, and start the engine."
+
+private const val LOADING_CROSSFADE_MS = 300
 
 /**
- * Plan-then-prefetch walkthrough.
+ * Single-loading-event walkthrough.
  *
  * Lifecycle:
- *   1. Enter screen → stream the plan envelope. While streaming, plan state
- *      counts complete step objects so the loader shows "Building plan…".
- *   2. Plan ready → kick off step 0's body generation; immediately prefetch
- *      step 1 (queues behind step 0 on GemmaService's convoMutex).
- *   3. User taps "next step" → snapshotFlow on stepIndex fires; ensure
- *      stepIndex is generating (no-op if already cached) and prefetch
- *      stepIndex+1.
- *   4. Back-nav disposes the LaunchedEffect; all child jobs cancel.
- *
- * In-session cache: [stepStates] survives recomposition while the screen
- * is on-stack. Each entry transitions monotonically Thinking → Streaming →
- * Ready and stays Ready; advancing back and forth between steps does not
- * re-stream.
+ *   1. Enter screen → the page is just the centered [WalkthroughLoadingPage]
+ *      with scaled-up bouncing dots, "PREPARING YOUR WALKTHROUGH", and a
+ *      quieter "GEMMA · ON-DEVICE" attribution. StepPill, StepProgress,
+ *      diagram card, AI strip, and CTA are NOT rendered during this phase.
+ *      The pipeline state machine still distinguishes BuildingPlan vs
+ *      BuildingStep internally (and the labels are wired up so future builds
+ *      can re-expose progress), but the unified page intentionally hides
+ *      it — no "Building step 3 of 5" theatre.
+ *   2. Plan + every step body finish streaming sequentially → pipeline
+ *      transitions to Ready. A 300ms Crossfade swaps the loading page for
+ *      the full walkthrough content (StepPill, StepProgress, AI strip with
+ *      step 1 body, diagram with first highlight, CTA).
+ *   3. Advancing the step index reads from the pre-built [RenderedStep]
+ *      cache; no further inference. The CTA goes through every step ending
+ *      at "Finish →".
  *
  * Fallback:
- *  - Plan parse fails or generation errors → fall back to the canned
- *    [Issue.walkthroughSteps] mapped into [PlanStep]s. Plan-level fallback
- *    short-circuits per-step Gemma calls; step bodies pull directly from the
- *    canned [WalkthroughStep.body] so we never mix live-generated bodies on
- *    top of a fallback plan.
- *  - Step parse fails or generation errors → fall back to the canned body
- *    at the same index, or a generic line if the canned list is shorter than
- *    the live plan.
+ *  - Plan parse fails / generation errors → fall back to the canned
+ *    [Issue.walkthroughSteps] mapped into [PlanStep]s, short-circuit to
+ *    Ready with every body filled from the canned baseline. Loading page
+ *    barely appears before the transition.
+ *  - Live plan + any individual step body failure → that one body falls
+ *    back to its canned counterpart; rest of the pipeline continues.
  *
  * In line with [AnimatedAIStrip]'s long-standing "isFallback is intentionally
- * not surfaced" rule, fallback state is carried on the state objects (for
- * tests and logs) but not rendered as a visible badge.
+ * not surfaced" rule, fallback state lives on the data objects (for logs
+ * and tests) but is not rendered as a visible badge.
  */
 @Composable
 fun WalkthroughScreen(
@@ -98,77 +103,80 @@ fun WalkthroughScreen(
         DTCTable.DEFAULT.lookup(code)?.defaultHighlights.orEmpty()
     }
 
-    var planState by remember(issue.id) {
-        mutableStateOf<WalkthroughPlanState>(WalkthroughPlanState.Thinking)
-    }
-    val stepStates = remember(issue.id) {
-        mutableStateMapOf<Int, WalkthroughStepState>()
+    var pipelineState by remember(issue.id) {
+        mutableStateOf<WalkthroughPipelineState>(WalkthroughPipelineState.BuildingPlan())
     }
     var stepIndex by remember(issue.id) { mutableIntStateOf(0) }
 
     LaunchedEffect(issue.id) {
         gemma.awaitReady()
         if (gemma.initError != null) {
-            planState = WalkthroughPlanState.Ready(planFallback, isFallback = true)
-        } else {
-            val buf = StringBuilder()
-            try {
-                gemma.streamWalkthroughPlan(issue).collect { delta ->
-                    buf.append(delta)
-                    val progress = extractWalkthroughPlanInProgress(buf.toString())
-                    planState = WalkthroughPlanState.Streaming(progress.stepsSeen)
+            pipelineState = buildReadyFromFallback(planFallback, cannedSteps)
+            return@LaunchedEffect
+        }
+
+        // Phase 1 — stream the plan envelope.
+        val planBuf = StringBuilder()
+        val parsedPlan: WalkthroughPlanState.Ready = try {
+            gemma.streamWalkthroughPlan(issue).collect { delta ->
+                planBuf.append(delta)
+                val progress = extractWalkthroughPlanInProgress(planBuf.toString())
+                pipelineState = WalkthroughPipelineState.BuildingPlan(progress.stepsSeen)
+            }
+            if (planBuf.isEmpty()) {
+                WalkthroughPlanState.Ready(planFallback, isFallback = true)
+            } else {
+                parseWalkthroughPlanOrFallback(planBuf.toString(), planFallback)
+            }
+        } catch (_: Throwable) {
+            WalkthroughPlanState.Ready(planFallback, isFallback = true)
+        }
+
+        if (parsedPlan.isFallback) {
+            pipelineState = buildReadyFromFallback(parsedPlan.steps, cannedSteps)
+            return@LaunchedEffect
+        }
+
+        // Phase 2 — stream each step body sequentially. The pipeline state
+        // advances BuildingStep(idx, total) for each so labels stay consistent
+        // (the loading page hides them; logs and any future variant can show
+        // them again without re-plumbing state).
+        val planSteps = parsedPlan.steps
+        val totalSteps = planSteps.size
+        val rendered = mutableListOf<RenderedStep>()
+        for ((idx, planStep) in planSteps.withIndex()) {
+            pipelineState = WalkthroughPipelineState.BuildingStep(currentIdx = idx, total = totalSteps)
+            val cannedFallback = cannedSteps.getOrNull(idx)?.body ?: GENERIC_STEP_FALLBACK
+            val stepBuf = StringBuilder()
+            val parsed: WalkthroughStepState.Ready = try {
+                gemma.streamWalkthroughStep(issue, planStep, totalSteps).collect { delta ->
+                    stepBuf.append(delta)
                 }
-                planState = if (buf.isEmpty()) {
-                    WalkthroughPlanState.Ready(planFallback, isFallback = true)
+                if (stepBuf.isEmpty()) {
+                    WalkthroughStepState.Ready(body = cannedFallback, isFallback = true)
                 } else {
-                    parseWalkthroughPlanOrFallback(buf.toString(), planFallback)
+                    parseWalkthroughStepOrFallback(stepBuf.toString(), cannedFallback)
                 }
             } catch (_: Throwable) {
-                planState = WalkthroughPlanState.Ready(planFallback, isFallback = true)
+                WalkthroughStepState.Ready(body = cannedFallback, isFallback = true)
             }
-        }
-
-        val ready = planState as? WalkthroughPlanState.Ready ?: return@LaunchedEffect
-        val planSteps = ready.steps
-        val planIsFallback = ready.isFallback
-        val totalSteps = planSteps.size
-        val launched = mutableMapOf<Int, Job>()
-
-        fun launchStep(idx: Int) {
-            if (idx < 0 || idx >= totalSteps) return
-            if (launched.containsKey(idx)) return
-            if (stepStates[idx] is WalkthroughStepState.Ready) return
-            stepStates[idx] = WalkthroughStepState.Thinking
-            launched[idx] = launch {
-                runStepGeneration(
-                    idx = idx,
-                    planSteps = planSteps,
-                    totalSteps = totalSteps,
-                    planIsFallback = planIsFallback,
-                    cannedSteps = cannedSteps,
-                    issue = issue,
-                    gemma = gemma,
-                    write = { state -> stepStates[idx] = state },
+            rendered.add(
+                RenderedStep(
+                    planStep = planStep,
+                    body = parsed.body,
+                    isFallback = parsed.isFallback,
                 )
-            }
+            )
         }
 
-        snapshotFlow { stepIndex }.collect { idx ->
-            launchStep(idx)
-            launchStep(idx + 1)
-        }
+        pipelineState = WalkthroughPipelineState.Ready(
+            steps = rendered,
+            anyFallback = rendered.any { it.isFallback },
+        )
     }
 
-    val total = (planState as? WalkthroughPlanState.Ready)?.steps?.size ?: cannedSteps.size
-    val planReady = planState as? WalkthroughPlanState.Ready
-    val activePlanStep = planReady?.steps?.getOrNull(stepIndex)
-    val activeStepState: WalkthroughStepState =
-        stepStates[stepIndex] ?: WalkthroughStepState.Thinking
-    val ctaEnabled = activeStepState is WalkthroughStepState.Ready
-    val ctaLabel = if (stepIndex == total - 1) "Finish →" else "Done — next step →"
-    val activeHighlights: List<DiagramTarget> = activePlanStep
-        ?.let { highlightsForPlanStep(it, defaultHighlights) }
-        ?: defaultHighlights
+    val ready = pipelineState as? WalkthroughPipelineState.Ready
+    val isReady = ready != null
 
     Column(
         modifier = Modifier
@@ -176,36 +184,25 @@ fun WalkthroughScreen(
             .background(CarCopilotColors.PhoneBg),
     ) {
         TopBar(left = TopBarLeft.Back(onBack = onBack))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 20.dp),
-        ) {
-            if (planReady != null) {
-                StepPill(current = stepIndex + 1, total = total)
-                Spacer(Modifier.height(14.dp))
-                StepProgress(current = stepIndex + 1, total = total)
-                Spacer(Modifier.height(18.dp))
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            Crossfade(
+                targetState = isReady,
+                animationSpec = tween(durationMillis = LOADING_CROSSFADE_MS),
+                label = "walkthrough-loading-to-content",
+            ) { contentReady ->
+                if (!contentReady || ready == null) {
+                    WalkthroughLoadingPage()
+                } else {
+                    WalkthroughContent(
+                        rendered = ready,
+                        stepIndex = stepIndex,
+                        defaultHighlights = defaultHighlights,
+                        severity = issue.severity,
+                        onAdvance = { stepIndex += 1 },
+                        onFinish = onFinish,
+                    )
+                }
             }
-            AnimatedAIStrip(
-                state = stripStateFor(planState, activeStepState),
-                label = stripLabelFor(planState, activePlanStep),
-                severity = issue.severity,
-            )
-            DiagramCard(
-                caption = diagramCaptionFor(planState, activePlanStep),
-                highlights = activeHighlights,
-            )
-            Spacer(Modifier.height(18.dp))
-            CtaButton(
-                label = ctaLabel,
-                enabled = ctaEnabled,
-                onClick = {
-                    if (stepIndex == total - 1) onFinish() else stepIndex += 1
-                },
-            )
         }
         BottomTabBar(
             selected = Tab.Home,
@@ -219,76 +216,63 @@ fun WalkthroughScreen(
     }
 }
 
-private suspend fun runStepGeneration(
-    idx: Int,
-    planSteps: List<PlanStep>,
-    totalSteps: Int,
-    planIsFallback: Boolean,
-    cannedSteps: List<WalkthroughStep>,
-    issue: Issue,
-    gemma: GemmaService,
-    write: (WalkthroughStepState) -> Unit,
+@Composable
+private fun WalkthroughContent(
+    rendered: WalkthroughPipelineState.Ready,
+    stepIndex: Int,
+    defaultHighlights: List<DiagramTarget>,
+    severity: Severity,
+    onAdvance: () -> Unit,
+    onFinish: () -> Unit,
 ) {
-    val cannedFallback = cannedSteps.getOrNull(idx)?.body
-        ?: "Snug what you opened, reconnect what you unplugged, and start the engine."
-    if (planIsFallback) {
-        // Plan itself fell back; don't mix live bodies on top of canned plan steps.
-        write(WalkthroughStepState.Ready(body = cannedFallback, isFallback = true))
-        return
-    }
-    val planStep = planSteps[idx]
-    val buf = StringBuilder()
-    try {
-        gemma.streamWalkthroughStep(issue, planStep, totalSteps).collect { delta ->
-            buf.append(delta)
-            val progress = extractWalkthroughStepInProgress(buf.toString())
-            if (progress.partial.isNotEmpty()) {
-                write(WalkthroughStepState.Streaming(progress.partial))
-            }
-        }
-        write(
-            if (buf.isEmpty()) {
-                WalkthroughStepState.Ready(body = cannedFallback, isFallback = true)
-            } else {
-                parseWalkthroughStepOrFallback(buf.toString(), cannedFallback)
-            }
+    val steps = rendered.steps
+    val total = steps.size
+    val activeRendered = steps.getOrNull(stepIndex) ?: return
+    val activeHighlights = highlightsForPlanStep(activeRendered.planStep, defaultHighlights)
+    val isLast = stepIndex == total - 1
+    val ctaLabel = if (isLast) "Finish →" else "Done — next step →"
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 20.dp),
+    ) {
+        StepPill(current = stepIndex + 1, total = total)
+        Spacer(Modifier.height(14.dp))
+        StepProgress(current = stepIndex + 1, total = total)
+        Spacer(Modifier.height(18.dp))
+        AnimatedAIStrip(
+            state = SynthesisState.Ready(
+                synthesis = activeRendered.body,
+                goodNews = null,
+                isFallback = activeRendered.isFallback,
+            ),
+            label = activeRendered.planStep.title,
+            severity = severity,
         )
-    } catch (_: Throwable) {
-        write(WalkthroughStepState.Ready(body = cannedFallback, isFallback = true))
-    }
-}
-
-private fun stripStateFor(
-    planState: WalkthroughPlanState,
-    activeStepState: WalkthroughStepState,
-): SynthesisState = when (planState) {
-    WalkthroughPlanState.Thinking, is WalkthroughPlanState.Streaming -> SynthesisState.Thinking
-    is WalkthroughPlanState.Ready -> when (activeStepState) {
-        WalkthroughStepState.Thinking -> SynthesisState.Thinking
-        is WalkthroughStepState.Streaming -> SynthesisState.Streaming(activeStepState.partial)
-        is WalkthroughStepState.Ready -> SynthesisState.Ready(
-            synthesis = activeStepState.body,
-            goodNews = null,
-            isFallback = activeStepState.isFallback,
+        DiagramCard(
+            caption = activeRendered.planStep.brief,
+            highlights = activeHighlights,
+        )
+        Spacer(Modifier.height(18.dp))
+        CtaButton(
+            label = ctaLabel,
+            enabled = true,
+            onClick = { if (isLast) onFinish() else onAdvance() },
         )
     }
 }
 
-private fun stripLabelFor(planState: WalkthroughPlanState, activePlanStep: PlanStep?): String =
-    when (planState) {
-        WalkthroughPlanState.Thinking -> "Building your plan"
-        is WalkthroughPlanState.Streaming -> {
-            val n = planState.stepsSeen
-            if (n == 0) "Building your plan" else "Building your plan — $n step${if (n == 1) "" else "s"} so far"
-        }
-        is WalkthroughPlanState.Ready -> activePlanStep?.title ?: "Working through it"
+private fun buildReadyFromFallback(
+    planSteps: List<PlanStep>,
+    cannedSteps: List<WalkthroughStep>,
+): WalkthroughPipelineState.Ready {
+    val rendered = planSteps.mapIndexed { idx, planStep ->
+        val body = cannedSteps.getOrNull(idx)?.body ?: GENERIC_STEP_FALLBACK
+        RenderedStep(planStep = planStep, body = body, isFallback = true)
     }
-
-private fun diagramCaptionFor(planState: WalkthroughPlanState, activePlanStep: PlanStep?): String =
-    when (planState) {
-        is WalkthroughPlanState.Ready -> activePlanStep?.brief.orEmpty()
-        else -> ""
-    }
+    return WalkthroughPipelineState.Ready(steps = rendered, anyFallback = true)
+}
 
 @Composable
 private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
