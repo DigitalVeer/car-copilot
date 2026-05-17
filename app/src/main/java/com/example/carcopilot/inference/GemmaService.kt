@@ -3,6 +3,7 @@ package com.example.carcopilot.inference
 import android.content.Context
 import android.util.Log
 import com.example.carcopilot.BuildConfig
+import com.example.carcopilot.model.HistoryEntry
 import com.example.carcopilot.model.Issue
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
@@ -251,6 +252,72 @@ class GemmaService(
                     Log.i(
                         METRIC_TAG,
                         "infer_raw surface=draft model=${BuildConfig.MODEL_VARIANT} text=${
+                            rawBuf.toString().replace("\n", "\\n").replace("\r", "")
+                        }"
+                    )
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
+     * Streams the history-pattern assistant response as per-token deltas,
+     * parallel in shape to [streamMechanicDraft]. The caller appends. On any
+     * error returns a flow that emits nothing and completes — caller's empty
+     * buffer falls back via [com.example.carcopilot.model.History.PATTERN].
+     *
+     * Lazy-creates the history Conversation on first entry; if the slot is
+     * held by synthesis or draft, closes it and recreates fresh. First-token
+     * latency therefore includes a cold system-prompt prefill the first time
+     * the user opens History in a session.
+     */
+    fun streamHistoryPattern(history: List<HistoryEntry>, currentIssue: Issue?): Flow<String> = flow {
+        if (engine == null) {
+            Log.w(TAG, "streamHistoryPattern: engine not initialized; emitting empty")
+            return@flow
+        }
+        convoMutex.withLock {
+            val convo = acquireConversationForSurfaceLocked("history") ?: run {
+                Log.w(TAG, "streamHistoryPattern: conversation creation failed; emitting empty")
+                return@withLock
+            }
+            val sendStart = System.nanoTime()
+            var firstTokenNs: Long = -1
+            var tokenCount = 0
+            val rawBuf = StringBuilder()
+            var failed = false
+            try {
+                convo.sendMessageAsync(promptBuilder.renderHistoryPatternPrompt(history, currentIssue))
+                    .collect { message ->
+                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
+                        tokenCount += 1
+                        val s = message.toString()
+                        rawBuf.append(s)
+                        emit(s)
+                    }
+            } catch (t: Throwable) {
+                failed = true
+                Log.w(TAG, "streamHistoryPattern collect: ${t.javaClass.simpleName}: ${t.message}")
+                try { convo.close() } catch (_: Throwable) {}
+                conversation = null
+                currentSurface = null
+                throw t
+            } finally {
+                val totalMs = (System.nanoTime() - sendStart) / 1_000_000
+                val firstMs = if (firstTokenNs > 0) (firstTokenNs - sendStart) / 1_000_000 else -1L
+                val steadyTokens = (tokenCount - 1).coerceAtLeast(0)
+                val steadyMs = (totalMs - firstMs).coerceAtLeast(1)
+                val tps = if (steadyTokens > 0) steadyTokens * 1000.0 / steadyMs else 0.0
+                Log.i(
+                    METRIC_TAG,
+                    "infer surface=history model=${BuildConfig.MODEL_VARIANT} " +
+                        "first_token=${firstMs}ms total=${totalMs}ms tokens=$tokenCount " +
+                        "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
+                )
+                if (!failed) {
+                    Log.i(
+                        METRIC_TAG,
+                        "infer_raw surface=history model=${BuildConfig.MODEL_VARIANT} text=${
                             rawBuf.toString().replace("\n", "\\n").replace("\r", "")
                         }"
                     )

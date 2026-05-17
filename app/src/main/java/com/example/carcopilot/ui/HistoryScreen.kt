@@ -18,6 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,10 +33,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.History
 import com.example.carcopilot.model.HistoryEntry
 import com.example.carcopilot.model.HistoryPill
 import com.example.carcopilot.model.HistoryStats
+import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.Severity
 import com.example.carcopilot.ui.components.BottomTabBar
 import com.example.carcopilot.ui.components.Tab
@@ -43,9 +50,38 @@ import com.example.carcopilot.ui.theme.JetBrainsMono
 
 @Composable
 fun HistoryScreen(
+    gemma: GemmaService,
+    currentIssue: Issue?,
     onHomeTab: () -> Unit,
     onBack: () -> Unit = onHomeTab,
 ) {
+    var state by remember { mutableStateOf<HistoryPatternState>(HistoryPatternState.Thinking) }
+
+    LaunchedEffect(Unit) {
+        gemma.awaitReady()
+        if (gemma.initError != null) {
+            state = HistoryPatternState.Ready(body = History.PATTERN.body, isFallback = true)
+            return@LaunchedEffect
+        }
+        val buf = StringBuilder()
+        try {
+            gemma.streamHistoryPattern(History.ENTRIES, currentIssue).collect { delta ->
+                buf.append(delta)
+                val progress = extractHistoryPatternInProgress(buf.toString())
+                if (progress.partial.isNotEmpty()) {
+                    state = HistoryPatternState.Streaming(progress.partial)
+                }
+            }
+            state = if (buf.isEmpty()) {
+                HistoryPatternState.Ready(body = History.PATTERN.body, isFallback = true)
+            } else {
+                parseHistoryPatternOrFallback(buf.toString(), History.PATTERN.body)
+            }
+        } catch (_: Throwable) {
+            state = HistoryPatternState.Ready(body = History.PATTERN.body, isFallback = true)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -60,11 +96,7 @@ fun HistoryScreen(
                 .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 20.dp),
         ) {
             AnimatedAIStrip(
-                state = SynthesisState.Ready(
-                    synthesis = History.PATTERN.body,
-                    goodNews = null,
-                    isFallback = false,
-                ),
+                state = state.toSynthesisState(),
                 label = History.PATTERN.label,
                 severity = Severity.warning,
             )
@@ -88,6 +120,17 @@ fun HistoryScreen(
             },
         )
     }
+}
+
+/** Adapt the history-pattern state to the SynthesisState the AI strip renders. */
+private fun HistoryPatternState.toSynthesisState(): SynthesisState = when (this) {
+    HistoryPatternState.Thinking -> SynthesisState.Thinking
+    is HistoryPatternState.Streaming -> SynthesisState.Streaming(partial)
+    is HistoryPatternState.Ready -> SynthesisState.Ready(
+        synthesis = body,
+        goodNews = null,
+        isFallback = isFallback,
+    )
 }
 
 @Composable

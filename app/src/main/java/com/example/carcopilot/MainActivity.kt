@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("history") {
                             HistoryScreen(
+                                gemma = gemma,
+                                currentIssue = misfire,
                                 onHomeTab = toHome,
                                 onBack = { nav.popBackStack() },
                             )
