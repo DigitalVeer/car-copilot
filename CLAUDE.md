@@ -120,6 +120,10 @@ adb devices
 
 The target phone is a corporate-managed Pixel 9 — sideload via APK browser is blocked, but ADB install works because USB debugging is authorized. Always install via `adb install`, never instruct the user to drag-and-drop an APK.
 
+## OBD emulator (Python, dev-only)
+
+A standalone Python 3 TCP server lives at `emulator/obd_emulator.py` — it speaks ELM327 AT commands over a socket so the upcoming Phase-12 transport layer can be developed without an ELM327 dongle and a car. Stdlib only, no `pip install`. Run with `python3 emulator/obd_emulator.py [--scenario corolla|hilux] [--port 35000]`. See `emulator/README.md` for scenarios and protocol coverage. The Android side has not yet been wired to it — Phase 12 work.
+
 ## Voice constraints (for prompts and fallback text)
 
 Every user-facing string follows the voice rules in `reference/prompts/system.md` — that file is the source of truth:
