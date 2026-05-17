@@ -17,6 +17,7 @@ data class VehicleInfo(
     val model: String,
     val mileage: Int?,
     val displayName: String,
+    val vin: String? = null,
 )
 
 data class IssueMeta(

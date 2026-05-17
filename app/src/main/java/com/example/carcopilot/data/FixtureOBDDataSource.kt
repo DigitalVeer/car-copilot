@@ -49,10 +49,15 @@ class FixtureOBDDataSource(private val context: Context) : OBDDataSource {
         )
 
         OBDSnapshot(
+            source = DataSource.FIXTURE,
             capturedAt = capturedAt,
             vehicle = vehicle,
+            // The 2009 Corolla 1ZZ-FE is gasoline. UNKNOWN is reserved for
+            // real-hardware snapshots that arrive before VIN decode runs.
+            engineFamily = EngineFamily.PETROL,
             dtcs = readDtcCodes(fixture, "raw_dtcs").map { it.toDtc() },
             pendingDtcs = readDtcCodes(fixture, "pending_dtcs").map { it.toDtc() },
+            permanentDtcs = emptyList(),
             liveReadings = buildReadings(liveData),
         )
     }

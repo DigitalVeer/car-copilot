@@ -19,11 +19,21 @@ import com.example.carcopilot.model.VehicleInfo
  * schema is shaped — for the fixture impl they're hardcoded next to the
  * fixture data; for a future BLE impl they'd come from the adapter's
  * onboard code database.
+ *
+ * Phase-12-prep fields ([source], [engineFamily], [permanentDtcs]) are
+ * shape for the Bluetooth path — every snapshot is tagged with its
+ * provenance and the vehicle's combustion family, and Mode-0A permanent
+ * codes are carried alongside the active and pending lists. No classifier
+ * logic gates on them yet; they're carried so consumers added later don't
+ * trigger a schema migration.
  */
 data class OBDSnapshot(
+    val source: DataSource,
     val capturedAt: String,
     val vehicle: VehicleInfo,
+    val engineFamily: EngineFamily = EngineFamily.UNKNOWN,
     val dtcs: List<DTC>,
     val pendingDtcs: List<DTC>,
+    val permanentDtcs: List<DTC> = emptyList(),
     val liveReadings: List<LiveReading>,
 )

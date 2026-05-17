@@ -57,3 +57,10 @@ The Phase 8 measurement pass (E4B baseline vs E2B vs E4B-with-prewarm) landed a 
 ## Phase 11 follow-ups
 
 - **Service history seam.** `History.ENTRIES / STATS / PATTERN` (in `model/History.kt`) is currently fixture-direct from `HistoryScreen`. Future `HistoryRepository` seam to back it with local persistence once history actually accumulates from real diagnoses — separate from `OBDDataSource` because service history is app-local state, not adapter output.
+
+## Surfaced from will/dev integration
+
+These two ideas came from Will's `will/dev` branch alongside the `VehicleState` schema work that landed in Phase-12-prep. We didn't absorb them — they belong post-hackathon — but they're worth keeping in writing.
+
+- **RAG-backed DTC table.** Will prototyped a JSON-asset DTC catalogue at `assets/rag/dtc_common.json` with ~15 scenarios, looked up at runtime instead of compiled into `DTCTable.DEFAULT`. Today's in-code table is fine because we have one entry (P0301); the moment we add a second the linear-growth comment in `DTCTable.kt` starts to bite. JSON-on-disk also opens the door to a vector-retrieval layer for fuzzy matches when an unknown DTC arrives. Worth picking up once the demo ships and the table has real breadth.
+- **Python TCP OBD emulator over WiFi.** Will's idea — a small Python server that speaks ELM327 over a TCP socket, with the Android app connecting via WiFi instead of Bluetooth. Decouples the future `BluetoothOBDDataSource` from dongle+car availability: you can develop and CI-test the transport against the emulator on a laptop, then swap the underlying socket for BLE. Also a useful Plan B for car-test sessions where the real hardware turns out to be finicky on the day. Aligns with the `DataSource.EMULATOR` value already in the schema.
