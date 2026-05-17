@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.carcopilot.BuildConfig
 import com.example.carcopilot.model.HistoryEntry
 import com.example.carcopilot.model.Issue
+import com.example.carcopilot.ui.PlanStep
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
@@ -363,6 +364,169 @@ class GemmaService(
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Streams the walkthrough plan envelope as per-token deltas. The caller
+     * appends and feeds the assembled JSON through
+     * [com.example.carcopilot.ui.parseWalkthroughPlanOrFallback]. On any
+     * error (engine missing, missing curated procedure, generation failure)
+     * the flow emits nothing and the screen's empty buffer falls back to the
+     * canned [com.example.carcopilot.data.DTCEntry.walkthroughSteps].
+     *
+     * Plan and step calls share the surface tag `walkthrough` on purpose:
+     * the plan stays in the Conversation's KV cache so each subsequent step
+     * generation sees the plan turn (plus prior step turns) and stays
+     * coherent with what the user is already looking at. Metric label
+     * distinguishes the two phases for performance triage.
+     */
+    fun streamWalkthroughPlan(issue: Issue): Flow<String> = flow {
+        if (engine == null) {
+            Log.w(TAG, "streamWalkthroughPlan: engine not initialized; emitting empty")
+            return@flow
+        }
+        convoMutex.withLock {
+            val convo = acquireConversationForSurfaceLocked("walkthrough") ?: run {
+                Log.w(TAG, "streamWalkthroughPlan: conversation creation failed; emitting empty")
+                return@withLock
+            }
+            val sendStart = System.nanoTime()
+            var firstTokenNs: Long = -1
+            var tokenCount = 0
+            val rawBuf = StringBuilder()
+            var failed = false
+            try {
+                convo.sendMessageAsync(promptBuilder.renderWalkthroughPlanPrompt(issue))
+                    .collect { message ->
+                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
+                        tokenCount += 1
+                        val s = message.toString()
+                        rawBuf.append(s)
+                        emit(s)
+                    }
+            } catch (t: Throwable) {
+                failed = true
+                Log.w(TAG, "streamWalkthroughPlan collect: ${t.javaClass.simpleName}: ${t.message}")
+                withContext(NonCancellable) {
+                    try { convo.cancelProcess() } catch (_: Throwable) {}
+                    try { convo.close() } catch (_: Throwable) {}
+                    conversation = null
+                    currentSurface = null
+                    lastCloseNs = System.nanoTime()
+                }
+                throw t
+            } finally {
+                logSurfaceMetrics(
+                    surfaceLabel = "walkthrough_plan",
+                    sendStart = sendStart,
+                    firstTokenNs = firstTokenNs,
+                    tokenCount = tokenCount,
+                    rawBuf = rawBuf,
+                    failed = failed,
+                )
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
+     * Streams the body for a single walkthrough step as per-token deltas.
+     * Caller assembles and feeds through
+     * [com.example.carcopilot.ui.parseWalkthroughStepOrFallback]. On any
+     * error the flow emits nothing and the screen falls back to the canned
+     * [com.example.carcopilot.model.WalkthroughStep.body] from
+     * [com.example.carcopilot.data.DTCEntry.walkthroughSteps].
+     *
+     * Shares surface tag `walkthrough` with [streamWalkthroughPlan] so
+     * successive step calls reuse the Conversation and KV cache. The first
+     * step pays a fresh system-prompt + plan prefill if the slot was held
+     * by another surface; subsequent steps pay only their own prefill.
+     */
+    fun streamWalkthroughStep(
+        issue: Issue,
+        planStep: PlanStep,
+        totalSteps: Int,
+    ): Flow<String> = flow {
+        if (engine == null) {
+            Log.w(TAG, "streamWalkthroughStep: engine not initialized; emitting empty")
+            return@flow
+        }
+        convoMutex.withLock {
+            val convo = acquireConversationForSurfaceLocked("walkthrough") ?: run {
+                Log.w(TAG, "streamWalkthroughStep: conversation creation failed; emitting empty")
+                return@withLock
+            }
+            val sendStart = System.nanoTime()
+            var firstTokenNs: Long = -1
+            var tokenCount = 0
+            val rawBuf = StringBuilder()
+            var failed = false
+            try {
+                convo.sendMessageAsync(promptBuilder.renderWalkthroughStepPrompt(issue, planStep, totalSteps))
+                    .collect { message ->
+                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
+                        tokenCount += 1
+                        val s = message.toString()
+                        rawBuf.append(s)
+                        emit(s)
+                    }
+            } catch (t: Throwable) {
+                failed = true
+                Log.w(TAG, "streamWalkthroughStep collect: ${t.javaClass.simpleName}: ${t.message}")
+                withContext(NonCancellable) {
+                    try { convo.cancelProcess() } catch (_: Throwable) {}
+                    try { convo.close() } catch (_: Throwable) {}
+                    conversation = null
+                    currentSurface = null
+                    lastCloseNs = System.nanoTime()
+                }
+                throw t
+            } finally {
+                logSurfaceMetrics(
+                    surfaceLabel = "walkthrough_step_${planStep.number}",
+                    sendStart = sendStart,
+                    firstTokenNs = firstTokenNs,
+                    tokenCount = tokenCount,
+                    rawBuf = rawBuf,
+                    failed = failed,
+                )
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
+     * Single-line metric writer shared by the walkthrough plan and step
+     * surfaces. The three Phase-5 surfaces inline this logging for the
+     * Phase-5 lock contract; the new walkthrough methods extract it because
+     * they're not under the same freeze and the duplication was getting
+     * unwieldy two ways.
+     */
+    private fun logSurfaceMetrics(
+        surfaceLabel: String,
+        sendStart: Long,
+        firstTokenNs: Long,
+        tokenCount: Int,
+        rawBuf: StringBuilder,
+        failed: Boolean,
+    ) {
+        val totalMs = (System.nanoTime() - sendStart) / 1_000_000
+        val firstMs = if (firstTokenNs > 0) (firstTokenNs - sendStart) / 1_000_000 else -1L
+        val steadyTokens = (tokenCount - 1).coerceAtLeast(0)
+        val steadyMs = (totalMs - firstMs).coerceAtLeast(1)
+        val tps = if (steadyTokens > 0) steadyTokens * 1000.0 / steadyMs else 0.0
+        Log.i(
+            METRIC_TAG,
+            "infer surface=$surfaceLabel model=${BuildConfig.MODEL_VARIANT} " +
+                "first_token=${firstMs}ms total=${totalMs}ms tokens=$tokenCount " +
+                "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
+        )
+        if (!failed) {
+            Log.i(
+                METRIC_TAG,
+                "infer_raw surface=$surfaceLabel model=${BuildConfig.MODEL_VARIANT} text=${
+                    rawBuf.toString().replace("\n", "\\n").replace("\r", "")
+                }"
+            )
+        }
+    }
 
     /**
      * Return the Conversation owned by [surface], creating it if the slot is

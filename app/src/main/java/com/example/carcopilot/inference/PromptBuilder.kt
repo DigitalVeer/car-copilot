@@ -7,6 +7,7 @@ import com.example.carcopilot.model.HistoryPill
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.LiveReading
 import com.example.carcopilot.model.LiveStatus
+import com.example.carcopilot.ui.PlanStep
 
 /**
  * Reads system.md and per-surface prompt templates from assets and fills the
@@ -21,6 +22,28 @@ class PromptBuilder(context: Context) {
         context.assets.open("mechanic_draft.md").bufferedReader().use { it.readText() }
     private val historyPatternTemplate: String =
         context.assets.open("history_pattern.md").bufferedReader().use { it.readText() }
+    private val walkthroughPlanTemplate: String =
+        context.assets.open("walkthrough_plan.md").bufferedReader().use { it.readText() }
+    private val walkthroughStepTemplate: String =
+        context.assets.open("walkthrough_step.md").bufferedReader().use { it.readText() }
+
+    /**
+     * Curated repair procedures keyed by DTC code. Loaded eagerly so a missing
+     * asset surfaces at PromptBuilder construction (which runs once at app
+     * start) rather than mid-stream during a live walkthrough call. The
+     * procedure text is the *grounding* document — Gemma paraphrases from it,
+     * never invents around it.
+     *
+     * Adding a new procedure is data work: drop a file at
+     * `assets/walkthroughs/<CODE>.md` and add it to this map. The map exists
+     * (instead of lazy-loading on demand) so an unknown code throws a clear
+     * `IllegalStateException` at lookup time, which the surface methods on
+     * [com.example.carcopilot.inference.GemmaService] catch into the standard
+     * Phase-5 fallback path.
+     */
+    private val procedures: Map<String, String> = mapOf(
+        "P0301" to context.assets.open("walkthroughs/P0301.md").bufferedReader().use { it.readText() },
+    )
 
     fun renderSynthesisPrompt(issue: Issue, language: String = "en"): String =
         synthesisTemplate
@@ -57,6 +80,49 @@ class PromptBuilder(context: Context) {
             .replace("{vehicle}", currentIssue?.vehicle?.displayName ?: "the user's car")
             .replace("{entries}", formatEntries(history))
             .replace("{language}", language)
+
+    fun renderWalkthroughPlanPrompt(issue: Issue, language: String = "en"): String =
+        walkthroughPlanTemplate
+            .replace("{vehicle}", issue.vehicle.displayName)
+            .replace("{mileage}", issue.vehicle.mileage?.toString() ?: "unknown")
+            .replace("{title}", issue.title)
+            .replace("{subtitle}", issue.subtitle)
+            .replace("{difficulty}", issue.meta.difficulty ?: "—")
+            .replace("{time_minutes}", issue.meta.timeMinutes?.toString() ?: "—")
+            .replace("{category}", issue.category)
+            .replace("{language}", language)
+            .replace("{procedure}", procedureFor(issue))
+
+    fun renderWalkthroughStepPrompt(
+        issue: Issue,
+        planStep: PlanStep,
+        totalSteps: Int,
+        language: String = "en",
+    ): String =
+        walkthroughStepTemplate
+            .replace("{vehicle}", issue.vehicle.displayName)
+            .replace("{mileage}", issue.vehicle.mileage?.toString() ?: "unknown")
+            .replace("{title}", issue.title)
+            .replace("{subtitle}", issue.subtitle)
+            .replace("{language}", language)
+            .replace("{step_number}", planStep.number.toString())
+            .replace("{total_steps}", totalSteps.toString())
+            .replace("{step_title}", planStep.title)
+            .replace("{step_brief}", planStep.brief)
+            .replace("{procedure}", procedureFor(issue))
+
+    /**
+     * Resolve the curated procedure text for [issue]'s primary DTC. Throws
+     * [IllegalStateException] when the issue has no DTC or the code is
+     * unmapped — both are configuration bugs that should fall back via
+     * GemmaService's catch handler rather than ship empty grounding to Gemma.
+     */
+    private fun procedureFor(issue: Issue): String {
+        val code = issue.dtcs.firstOrNull()?.code
+            ?: error("Issue ${issue.id} has no DTCs; cannot resolve a walkthrough procedure.")
+        return procedures[code]
+            ?: error("No curated procedure for DTC $code. Add assets/walkthroughs/$code.md and wire it into PromptBuilder.procedures.")
+    }
 
     private fun formatDtcs(dtcs: List<DTC>): String =
         if (dtcs.isEmpty()) "(none)"
