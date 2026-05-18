@@ -19,17 +19,16 @@ Usage:
     python3 obd_emulator.py --panel --panel-port 8080
 """
 
+import curses
 import itertools
 import json
 import socket
 import threading
 import time
 import argparse
-from http.server import HTTPServer, BaseHTTPRequestHandler
 
 HOST = "0.0.0.0"
 PORT = 35000
-PANEL_PORT = 35001
 
 
 # ── Scenario definitions ──────────────────────────────────────────────────────
@@ -341,142 +340,117 @@ class ELM327Session:
             self.conn.close()
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── TUI ───────────────────────────────────────────────────────────────────────
 
-PANEL_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Car Copilot · Scenario Panel</title>
-<style>
-  *{{box-sizing:border-box;margin:0;padding:0}}
-  body{{font-family:-apple-system,system-ui,sans-serif;background:#0d0d0d;color:#e0e0e0;padding:2rem}}
-  header{{margin-bottom:1.75rem}}
-  h1{{font-size:0.8rem;letter-spacing:.12em;text-transform:uppercase;color:#555;margin-bottom:.25rem}}
-  .subtitle{{font-size:.8rem;color:#444}}
-  .grid{{display:flex;gap:1rem;flex-wrap:wrap}}
-  .card{{background:#161616;border:2px solid #252525;border-radius:14px;padding:1.25rem;width:300px;transition:border-color .2s}}
-  .card.active{{border-color:#22c55e}}
-  .name{{font-size:.9rem;font-weight:500;line-height:1.45;margin-bottom:.6rem}}
-  .dtcs{{font-family:'SF Mono','Fira Code',monospace;font-size:.8rem;color:#f59e0b;margin-bottom:.35rem}}
-  .pending{{font-size:.75rem;color:#555;margin-bottom:1rem}}
-  .btn{{width:100%;padding:.5rem;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;background:#222;color:#ccc;transition:background .15s}}
-  .btn:hover:not(:disabled){{background:#2e2e2e}}
-  .card.active .btn{{background:#22c55e;color:#000;font-weight:600;cursor:default}}
-  .badge{{display:inline-block;background:#22c55e;color:#000;font-size:.62rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:.5rem;vertical-align:middle}}
-  footer{{margin-top:2rem;font-size:.72rem;color:#383838}}
-</style>
-</head>
-<body>
-<header>
-  <h1>Car Copilot &middot; Scenario Panel</h1>
-  <div class="subtitle">App polls every 3 s &mdash; select a scenario and watch the card update.</div>
-</header>
-<div class="grid" id="grid"></div>
-<footer id="footer">connecting&hellip;</footer>
-<script>
-const SCENARIOS={scenarios_json};
-let active=null;
+def _tui(stdscr, current_scenario, scenarios, obd_port):
+    curses.curs_set(0)
+    curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_GREEN,  -1)  # active scenario
+    curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)  # cursor row
 
-function render(){{
-  const grid=document.getElementById('grid');
-  grid.innerHTML='';
-  Object.entries(SCENARIOS).forEach(([key,s])=>{{
-    const isActive=key===active;
-    const card=document.createElement('div');
-    card.className='card'+(isActive?' active':'');
-    card.innerHTML=`
-      <div class="name">${{s.name}}${{isActive?'<span class="badge">ACTIVE</span>':''}}</div>
-      <div class="dtcs">${{s.confirmed_dtcs.join(', ')||'(no DTCs)'}}</div>
-      <div class="pending">${{s.pending_dtcs.length?'Pending: '+s.pending_dtcs.join(', '):'No pending codes'}}</div>
-      <button class="btn" ${{isActive?'disabled':''}} onclick="switchTo('${{key}}')">${{isActive?'Active':'Select'}}</button>
-    `;
-    grid.appendChild(card);
-  }});
-  document.getElementById('footer').textContent='Updated '+new Date().toLocaleTimeString();
-}}
+    keys = list(scenarios.keys())
+    cursor = 0
 
-async function switchTo(key){{
-  await fetch('/switch',{{method:'POST',body:key}});
-  await poll();
-}}
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
 
-async function poll(){{
-  try{{
-    const r=await fetch('/state');
-    const d=await r.json();
-    if(d.active!==active){{active=d.active;render();}}
-    else{{document.getElementById('footer').textContent='Updated '+new Date().toLocaleTimeString();}}
-  }}catch(e){{document.getElementById('footer').textContent='Reconnecting...';}}
-}}
+        # Left panel is 24 chars wide; right panel gets the rest.
+        lw = 24
+        rx = lw + 1   # right panel x start
 
-poll();
-setInterval(poll,2000);
-</script>
-</body>
-</html>"""
+        active_key = next((k for k, v in scenarios.items() if v is current_scenario[0]), None)
+        selected_key = keys[cursor]
 
+        # ── left panel ──────────────────────────────────────────────────────
+        _add(stdscr, 0, 0, "CAR COPILOT", curses.A_BOLD)
+        _add(stdscr, 1, 0, f"port {obd_port}", curses.A_DIM)
+        _add(stdscr, 2, 0, "─" * lw)
 
-def make_panel_handler(current_scenario, scenarios):
-    """Return an HTTP handler class wired to the shared current_scenario state."""
+        for i, key in enumerate(keys):
+            s = scenarios[key]
+            is_cursor = i == cursor
+            is_active = key == active_key
+            row = 3 + i * 3
 
-    class PanelHandler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path == "/state":
-                self._json({"active": self._active_key()})
+            mark  = "●" if is_active else "○"
+            label = f" {mark} {key}"
+            dtcs  = " ".join(s["confirmed_dtcs"]) or "—"
+
+            if is_cursor:
+                _add(stdscr, row,     0, label.ljust(lw), curses.color_pair(2))
+                _add(stdscr, row + 1, 2, dtcs[:lw - 2],  curses.color_pair(2))
+            elif is_active:
+                _add(stdscr, row,     0, label, curses.color_pair(1) | curses.A_BOLD)
+                _add(stdscr, row + 1, 2, dtcs[:lw - 2], curses.color_pair(1))
             else:
-                html = PANEL_HTML.replace(
-                    "{scenarios_json}",
-                    json.dumps({
-                        k: {
-                            "name": v["name"],
-                            "confirmed_dtcs": v["confirmed_dtcs"],
-                            "pending_dtcs": v["pending_dtcs"],
-                        }
-                        for k, v in scenarios.items()
-                    }),
-                )
-                body = html.encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", len(body))
-                self.end_headers()
-                self.wfile.write(body)
+                _add(stdscr, row,     0, label)
+                _add(stdscr, row + 1, 2, dtcs[:lw - 2], curses.A_DIM)
 
-        def do_POST(self):
-            if self.path == "/switch":
-                length = int(self.headers.get("Content-Length", 0))
-                key = self.rfile.read(length).decode().strip()
-                if key in scenarios:
-                    current_scenario[0] = scenarios[key]
-                    print(f"\n  → switched to: {scenarios[key]['name']}")
-            self._json({"active": self._active_key()})
+        bot = h - 5
+        _add(stdscr, bot,     0, "─" * lw)
+        _add(stdscr, bot + 1, 0, " ↑↓  navigate",  curses.A_DIM)
+        _add(stdscr, bot + 2, 0, " ↵   activate",  curses.A_DIM)
+        _add(stdscr, bot + 3, 0, " q   quit",      curses.A_DIM)
 
-        def _active_key(self):
-            for k, v in scenarios.items():
-                if v is current_scenario[0]:
-                    return k
-            return None
+        # Vertical divider
+        for row in range(h):
+            _add(stdscr, row, lw, "│")
 
-        def _json(self, data):
-            body = json.dumps(data).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", len(body))
-            self.end_headers()
-            self.wfile.write(body)
+        # ── right panel: full scenario JSON ─────────────────────────────────
+        title = f" {selected_key}"
+        if selected_key == active_key:
+            title += "  [ACTIVE]"
+        _add(stdscr, 0, rx, title, curses.A_BOLD)
+        _add(stdscr, 1, rx, "─" * max(0, w - rx - 1))
 
-        def log_message(self, format, *args):
-            pass  # suppress per-request logs
+        json_lines = json.dumps(scenarios[selected_key], indent=2).splitlines()
+        for i, line in enumerate(json_lines):
+            if 2 + i >= h:
+                break
+            _add(stdscr, 2 + i, rx, line[:max(0, w - rx - 1)])
 
-    return PanelHandler
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+        if ch == curses.KEY_UP:
+            cursor = (cursor - 1) % len(keys)
+        elif ch == curses.KEY_DOWN:
+            cursor = (cursor + 1) % len(keys)
+        elif ch in (curses.KEY_ENTER, 10, 13):
+            current_scenario[0] = scenarios[selected_key]
+        elif ch in (ord("q"), ord("Q"), 27):
+            break
 
 
-def _print_scenario(scenario: dict, cycle_secs: int = 0) -> None:
-    label = f"  (switching every {cycle_secs}s)" if cycle_secs else ""
-    print(f"  → {scenario['name']}{label}")
-    print(f"     DTCs: {scenario['confirmed_dtcs']}")
+def _add(stdscr, row, col, text, attr=0):
+    """addstr that silently ignores out-of-bounds writes."""
+    h, w = stdscr.getmaxyx()
+    if row < 0 or row >= h or col < 0 or col >= w:
+        return
+    text = str(text)[:max(0, w - col)]
+    try:
+        stdscr.addstr(row, col, text, attr)
+    except curses.error:
+        pass
 
+
+# ── OBD TCP server ────────────────────────────────────────────────────────────
+
+def _serve(host, port, current_scenario):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind((host, port))
+        srv.listen(5)
+        while True:
+            conn, _ = srv.accept()
+            scenario = current_scenario[0]
+            threading.Thread(
+                target=ELM327Session(conn, scenario).run, daemon=True
+            ).start()
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Car Copilot OBD-II emulator")
@@ -484,10 +458,6 @@ def main():
                         help="Starting scenario (default: corolla)")
     parser.add_argument("--cycle", type=int, default=0, metavar="SECS",
                         help="Rotate through all scenarios every N seconds (0 = disabled)")
-    parser.add_argument("--panel", action="store_true",
-                        help="Start the browser control panel (http://localhost:PANEL_PORT)")
-    parser.add_argument("--panel-port", type=int, default=PANEL_PORT,
-                        help=f"Port for the control panel (default: {PANEL_PORT})")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--host", default=HOST)
     parser.add_argument("--list", action="store_true", help="List available scenarios and exit")
@@ -499,52 +469,30 @@ def main():
             print(f"              DTCs: {s['confirmed_dtcs']}")
         return
 
-    # Pre-compute supported PID bitmaps for all scenarios.
     for s in SCENARIOS.values():
         populate_supported_pid_bitmaps(s)
 
-    # current_scenario[0] is read by the accept loop for each new connection.
-    # Replacing it in the cycling thread is safe because TcpOBDDataSource opens
-    # a fresh TCP connection per poll — each poll gets a consistent snapshot of
-    # whichever scenario is current at accept time.
     scenario_keys = list(SCENARIOS.keys())
     start_idx = scenario_keys.index(args.scenario)
     rotator = itertools.cycle(scenario_keys[start_idx:] + scenario_keys[:start_idx])
     current_scenario = [SCENARIOS[next(rotator)]]
 
-    print(f"Car Copilot OBD Emulator  —  {args.host}:{args.port}")
-    _print_scenario(current_scenario[0], args.cycle)
-
-    if args.panel:
-        handler = make_panel_handler(current_scenario, SCENARIOS)
-        panel = HTTPServer(("0.0.0.0", args.panel_port), handler)
-        threading.Thread(target=panel.serve_forever, daemon=True).start()
-        print(f"  panel    : http://localhost:{args.panel_port}")
-    print()
+    # OBD TCP server runs in a daemon thread; TUI owns the main thread.
+    threading.Thread(
+        target=_serve, args=(args.host, args.port, current_scenario), daemon=True
+    ).start()
 
     if args.cycle:
         def _rotate():
             while True:
                 time.sleep(args.cycle)
-                key = next(rotator)
-                current_scenario[0] = SCENARIOS[key]
-                print()
-                _print_scenario(current_scenario[0], args.cycle)
+                current_scenario[0] = SCENARIOS[next(rotator)]
         threading.Thread(target=_rotate, daemon=True).start()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind((args.host, args.port))
-        srv.listen(5)
-        print("Waiting for connection  (Ctrl+C to stop)\n")
-        try:
-            while True:
-                conn, addr = srv.accept()
-                scenario = current_scenario[0]
-                t = threading.Thread(target=ELM327Session(conn, scenario).run, daemon=True)
-                t.start()
-        except KeyboardInterrupt:
-            print("\nStopped.")
+    try:
+        curses.wrapper(_tui, current_scenario, SCENARIOS, args.port)
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
