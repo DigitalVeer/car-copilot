@@ -34,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -230,15 +229,24 @@ private fun DraftMetaRow() {
     }
 }
 
+/**
+ * Same fix pattern WalkthroughScreen.CtaButton uses, ported here after
+ * a hilux smoke reproduced the symptom on this screen: opacity baked into
+ * the background/border/text colors rather than applied via Modifier.alpha
+ * (no graphics layer to mis-invalidate when ctasEnabled flips from false to
+ * true at end-of-stream), and `clickable(enabled = …)` rather than a
+ * conditional modifier branch (stable chain identity, only the parameter
+ * value flips). See commit 2b0ace5 for the full investigation of the
+ * Pixel 9 RenderNode stale-redraw bug this avoids.
+ */
 @Composable
 private fun PrimaryCta(label: String, enabled: Boolean, onClick: () -> Unit) {
-    val base = Modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(10.dp))
-        .background(CarCopilotColors.Accent)
-        .alpha(if (enabled) 1f else 0.4f)
     Box(
-        modifier = (if (enabled) base.clickable(onClick = onClick) else base)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(CarCopilotColors.Accent.copy(alpha = if (enabled) 1f else 0.4f))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -253,20 +261,20 @@ private fun PrimaryCta(label: String, enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun GhostCta(label: String, enabled: Boolean, onClick: () -> Unit) {
-    val base = Modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(10.dp))
-        .border(1.dp, CarCopilotColors.LineBright, RoundedCornerShape(10.dp))
-        .alpha(if (enabled) 1f else 0.4f)
+    val opacity = if (enabled) 1f else 0.4f
     Box(
-        modifier = (if (enabled) base.clickable(onClick = onClick) else base)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, CarCopilotColors.LineBright.copy(alpha = opacity), RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             style = CarCopilotTypography.CtaButton,
-            color = CarCopilotColors.MetaBold,
+            color = CarCopilotColors.MetaBold.copy(alpha = opacity),
             textAlign = TextAlign.Center,
         )
     }
