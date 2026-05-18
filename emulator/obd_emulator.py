@@ -7,14 +7,18 @@ The emulator serves pre-defined vehicle scenarios so the full pipeline
 can be developed and demoed without real hardware.
 
 Usage:
-    python3 obd_emulator.py                     # Corolla P0171 (default)
-    python3 obd_emulator.py --scenario hilux    # Hilux diesel P0087
+    python3 obd_emulator.py                          # Corolla P0171 (default)
+    python3 obd_emulator.py --scenario hilux         # Hilux diesel P0087
+    python3 obd_emulator.py --cycle 10               # rotate all scenarios every 10 s
+    python3 obd_emulator.py --cycle 5 --scenario misfire  # start at misfire, then cycle
     python3 obd_emulator.py --port 35000
     python3 obd_emulator.py --list
 """
 
+import itertools
 import socket
 import threading
+import time
 import argparse
 
 HOST = "0.0.0.0"
@@ -332,9 +336,18 @@ class ELM327Session:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _print_scenario(scenario: dict, cycle_secs: int = 0) -> None:
+    label = f"  (switching every {cycle_secs}s)" if cycle_secs else ""
+    print(f"  → {scenario['name']}{label}")
+    print(f"     DTCs: {scenario['confirmed_dtcs']}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Car Copilot OBD-II emulator")
-    parser.add_argument("--scenario", choices=list(SCENARIOS.keys()), default="corolla")
+    parser.add_argument("--scenario", choices=list(SCENARIOS.keys()), default="corolla",
+                        help="Starting scenario (default: corolla)")
+    parser.add_argument("--cycle", type=int, default=0, metavar="SECS",
+                        help="Rotate through all scenarios every N seconds (0 = disabled)")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--host", default=HOST)
     parser.add_argument("--list", action="store_true", help="List available scenarios and exit")
@@ -346,13 +359,32 @@ def main():
             print(f"              DTCs: {s['confirmed_dtcs']}")
         return
 
-    scenario = SCENARIOS[args.scenario]
-    populate_supported_pid_bitmaps(scenario)
-    print(f"Car Copilot OBD Emulator")
-    print(f"  scenario : {scenario['name']}")
-    print(f"  DTCs     : {scenario['confirmed_dtcs']}")
-    print(f"  address  : {args.host}:{args.port}")
+    # Pre-compute supported PID bitmaps for all scenarios.
+    for s in SCENARIOS.values():
+        populate_supported_pid_bitmaps(s)
+
+    # current_scenario[0] is read by the accept loop for each new connection.
+    # Replacing it in the cycling thread is safe because TcpOBDDataSource opens
+    # a fresh TCP connection per poll — each poll gets a consistent snapshot of
+    # whichever scenario is current at accept time.
+    scenario_keys = list(SCENARIOS.keys())
+    start_idx = scenario_keys.index(args.scenario)
+    rotator = itertools.cycle(scenario_keys[start_idx:] + scenario_keys[:start_idx])
+    current_scenario = [SCENARIOS[next(rotator)]]
+
+    print(f"Car Copilot OBD Emulator  —  {args.host}:{args.port}")
+    _print_scenario(current_scenario[0], args.cycle)
     print()
+
+    if args.cycle:
+        def _rotate():
+            while True:
+                time.sleep(args.cycle)
+                key = next(rotator)
+                current_scenario[0] = SCENARIOS[key]
+                print()
+                _print_scenario(current_scenario[0], args.cycle)
+        threading.Thread(target=_rotate, daemon=True).start()
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -362,7 +394,7 @@ def main():
         try:
             while True:
                 conn, addr = srv.accept()
-                print(f"Connection from {addr[0]}:{addr[1]}")
+                scenario = current_scenario[0]
                 t = threading.Thread(target=ELM327Session(conn, scenario).run, daemon=True)
                 t.start()
         except KeyboardInterrupt:
