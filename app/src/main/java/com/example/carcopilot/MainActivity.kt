@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
 private fun MainContent(app: CarCopilotApp) {
     val gemma = app.gemma
     val misfire = remember { app.initialIssue }
+    val classification = remember { app.initialClassification }
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         if (misfire == null) {
             // No diagnosable Issue at startup — either BLUETOOTH mode
@@ -112,6 +113,7 @@ private fun MainContent(app: CarCopilotApp) {
                     IssueScreen(
                         issue = misfire,
                         gemma = gemma,
+                        classification = classification,
                         onBack = { nav.popBackStack() },
                         onWalkthrough = { nav.navigate("walkthrough") },
                         onMechanicDraft = { nav.navigate("draft") },

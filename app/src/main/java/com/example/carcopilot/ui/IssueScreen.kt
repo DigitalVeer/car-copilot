@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.inference.GemmaService
+import com.example.carcopilot.model.Classification
 import com.example.carcopilot.model.FALLBACK_GOOD_NEWS_MISFIRE
 import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
 import com.example.carcopilot.model.Issue
@@ -52,6 +53,7 @@ import com.example.carcopilot.ui.theme.CarCopilotTypography
 fun IssueScreen(
     issue: Issue,
     gemma: GemmaService,
+    classification: Classification? = null,
     onBack: () -> Unit,
     onWalkthrough: () -> Unit = {},
     onMechanicDraft: () -> Unit = {},
@@ -73,7 +75,7 @@ fun IssueScreen(
         }
         try {
             typewriterCollect(
-                source = gemma.streamSynthesis(issue),
+                source = gemma.streamSynthesis(issue, classification),
                 extractDisplay = { raw -> extractSynthesisInProgress(raw).partial },
                 onStreaming = { displayed -> state = SynthesisState.Streaming(displayed) },
                 onDone = { raw ->

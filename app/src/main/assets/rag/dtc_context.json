@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "documents": [
+    {
+      "id": "p0087-fuel-pressure-regional",
+      "dtcs": ["P0087", "P1229"],
+      "category": "fuel_system",
+      "title": "Fuel rail pressure fault — regional and fleet context",
+      "body": "P0087 is disproportionately common in markets with variable diesel quality. Particulate matter and water contamination in fuel can clog a Toyota 2KD-FTV filter within 5,000–10,000 km — far faster than the standard 30,000 km service interval. In high-mileage workhorses (200k+ km), the SCV (suction control valve) on the high-pressure pump is a common secondary cause after the filter has been ruled out. Fuel filters for the 2KD are cheap ($5–15) and widely available in any market where the Hilux is common. A clogged filter is the correct first hypothesis. The SCV is a $30–80 part and requires a fuel pressure gauge to confirm — refer to a mechanic if the filter swap doesn't resolve it. Genuine or quality-branded filters last significantly longer than no-name equivalents in contaminated fuel environments."
+    },
+    {
+      "id": "p0171-lean-dusty-altitude",
+      "dtcs": ["P0171"],
+      "category": "fuel_system",
+      "title": "Lean condition — dusty environments and high altitude",
+      "body": "P0171 in dusty environments is almost always a clogged air filter or a MAF sensor coated in fine road grit. In arid regions, air filters may need replacement every 10,000–15,000 km rather than the standard 30,000 km. MAF cleaner spray ($3–5) restores a dirty sensor in minutes. At elevations above 2,000 m (common in Ethiopia, Bolivia, Nepal, Ecuador, Colombia), a mild lean condition is expected — the ECU compensates but may still log P0171 when fuel trims push to the limit. Long-term fuel trim above +15% with a low MAF reading strongly suggests a dirty sensor or filter rather than altitude alone. Vacuum leaks from cracked intake hose are the third most common cause, especially on high-mileage vehicles with original rubber components."
+    },
+    {
+      "id": "p0301-misfire-developing-market",
+      "dtcs": ["P0301", "P0302", "P0303", "P0304"],
+      "category": "misfire",
+      "title": "Cylinder misfire — parts quality and maintenance context",
+      "body": "Single-cylinder misfires in developing markets are most commonly caused by a failed ignition coil, a fouled spark plug, or a leaking injector O-ring. Counterfeit ignition coils are widespread in aftermarket supply chains — they fail within months vs years for genuine Toyota/Denso units. A rich O2 reading alongside a misfire code typically indicates a flooded cylinder from a leaking injector or a failed coil allowing unburned fuel to pass. Spark plug condition on high-mileage petrol engines often reveals the history: black and sooty plugs indicate rich running; white or chalky plugs indicate lean or overheating. Misfire codes that cycle across cylinders (P0301 then P0302) after a coil swap point to a fuel delivery issue rather than an ignition one."
+    },
+    {
+      "id": "general-developing-market",
+      "dtcs": [],
+      "category": "general",
+      "title": "General vehicle context for high-mileage, high-utilisation vehicles",
+      "body": "Vehicles in developing markets commonly operate at 2–3x beyond manufacturer service intervals due to cost constraints and limited access to service centres. Sludge buildup from extended oil change intervals can affect VVT systems and sensor accuracy. Fuel quality varies significantly — lower octane, higher sulphur content, and occasional water contamination are common. When advising on repairs, prioritise the cheapest and most accessible fix first: a $5 fuel filter or $3 MAF cleaner should always be tried before suggesting a $200+ pump or sensor replacement. Availability of genuine OEM parts varies widely by region — quality aftermarket (Bosch, Denso, NGK) is a reliable alternative where OEM isn't accessible."
+    }
+  ]
+}

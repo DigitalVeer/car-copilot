@@ -110,6 +110,57 @@ I'm trying to keep costs down — happy to bring it in when you have time.""",
                     ),
                     defaultHighlights = listOf(DiagramTarget.COIL_1),
                 ),
+                "P0087" to DTCEntry(
+                    code = "P0087",
+                    description = "Fuel rail pressure too low",
+                    category = "fuel_system",
+                    severity = Severity.warning,
+                    route = Route.diy,
+                    title = "Replace fuel filter — diesel pressure too low",
+                    subtitle = "Your diesel isn't building enough pressure. A clogged fuel filter is the right first thing to check — it's cheap and quick.",
+                    meta = IssueMeta(
+                        costUsdMin = 5,
+                        costUsdMax = 20,
+                        timeMinutes = 45,
+                        difficulty = "easy",
+                        drivability = "reduced power — avoid highway or heavy loads",
+                    ),
+                    walkthroughSteps = listOf(
+                        WalkthroughStep(
+                            number = 1,
+                            title = "Find the fuel filter",
+                            body = "Open the bonnet. The fuel filter on most diesel Hilux and similar trucks is a small metal canister mounted near the injection pump, with two fuel lines running into it. Check your owner's manual if you're not sure. Some models have a secondary water separator further along the line.",
+                            diagramHint = "Fuel filter — near injection pump",
+                        ),
+                        WalkthroughStep(
+                            number = 2,
+                            title = "Let it cool and prep the area",
+                            body = "Let the engine cool for 10 minutes before touching anything. Diesel is pressurised — opening a line on a hot engine can spray fuel. Wrap a rag around each fitting before you loosen it, and put a small container underneath to catch any drips.",
+                            diagramHint = "Rag over fuel line fittings before loosening",
+                        ),
+                        WalkthroughStep(
+                            number = 3,
+                            title = "Swap the filter",
+                            body = "Loosen the clips or banjo bolts holding the fuel lines to the old filter. Note which line is inlet and which is outlet — the new filter is usually marked with a flow arrow. Slide the new filter in, reconnect the lines, and snug the fittings. Wipe up any spilled diesel.",
+                            diagramHint = "Arrow on filter shows fuel flow direction",
+                        ),
+                        WalkthroughStep(
+                            number = 4,
+                            title = "Prime and start",
+                            body = "If your system has a manual primer bulb, pump it until it feels firm — this pushes fuel through the new filter and clears any air from the line. Then crank the engine. It may take a few extra seconds to start while the system primes. Let it idle and check the filter connections for drips.",
+                            diagramHint = "Primer bulb — pump until firm before cranking",
+                        ),
+                    ),
+                    mechanicDraft = """Hi — my diesel is throwing a P0087 (fuel rail pressure too low). Rail pressure is reading around 28,000 kPa at idle when it should be closer to 34,500 kPa minimum.
+
+I've already replaced the fuel filter as a first step. The pressure is still low. Could you check the fuel system — specifically whether the SCV on the high-pressure pump might be at fault?
+
+Happy to bring it in at your convenience.""",
+                    tripReadiness = TripReadiness(
+                        headline = "Reduced power — drive carefully",
+                        caveat = "avoid highway or heavy loads until fixed",
+                    ),
+                ),
                 "P0171" to DTCEntry(
                     code = "P0171",
                     description = "System too lean (Bank 1)",

@@ -8,8 +8,10 @@ import com.example.carcopilot.data.EngineFamily
 import com.example.carcopilot.data.FixtureOBDDataSource
 import com.example.carcopilot.data.IssueBuilder
 import com.example.carcopilot.data.OBDDataSource
+import com.example.carcopilot.data.RulesEngine
 import com.example.carcopilot.data.TcpOBDDataSource
 import com.example.carcopilot.inference.GemmaService
+import com.example.carcopilot.model.Classification
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.VehicleInfo
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +54,9 @@ class CarCopilotApp : Application() {
     var initialIssue: Issue? = null
         private set
 
+    var initialClassification: Classification? = null
+        private set
+
     lateinit var gemma: GemmaService
         private set
 
@@ -84,12 +89,15 @@ class CarCopilotApp : Application() {
         // can read synchronously here so the NavHost composes against a
         // ready Issue and the user doesn't see a one-frame empty state.
         if (BuildConfig.DATA_SOURCE != "BLUETOOTH") {
-            initialIssue = runBlocking {
+            runBlocking {
                 obd.readSnapshot()
                     .onFailure { Log.w(TAG, "initial snapshot failed: ${it.message}") }
                     .getOrNull()
                     ?.takeIf { it.dtcs.isNotEmpty() }
-                    ?.let { IssueBuilder.build(it, DTCTable.DEFAULT) }
+                    ?.let { snapshot ->
+                        initialIssue = IssueBuilder.build(snapshot, DTCTable.DEFAULT)
+                        initialClassification = RulesEngine.classify(snapshot)
+                    }
             }
         }
 
