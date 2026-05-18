@@ -235,6 +235,51 @@ Happy to bring it in at your convenience.""",
                         caveat = "avoid extended highway driving until fixed",
                     ),
                 ),
+                "P0118" to DTCEntry(
+                    code = "P0118",
+                    description = "Engine coolant temperature circuit high",
+                    category = "cooling",
+                    severity = Severity.severe,
+                    route = Route.diy,
+                    title = "Coolant reading dangerously hot",
+                    subtitle = "Your sensor is reporting an extreme temperature. It could be a real overheat or a failing sensor — either way, stop the engine before driving further.",
+                    meta = IssueMeta(
+                        costUsdMin = 0,
+                        costUsdMax = 35,
+                        timeMinutes = 25,
+                        difficulty = "easy",
+                        drivability = "stop driving — engine may overheat",
+                    ),
+                    walkthroughSteps = listOf(
+                        WalkthroughStep(
+                            number = 1,
+                            title = "Pull over and shut off",
+                            body = "- Find a safe spot and [R]stop the engine[/R] right away — driving a hot engine warps the head.\n- Pop the hood to let heat escape, but [Y]don't touch anything yet[/Y] — surfaces near the radiator hit 200°F.\n- Set a [Y]20-minute timer[/Y] before you go further.",
+                            diagramHint = "Stop, hood up, hands off",
+                        ),
+                        WalkthroughStep(
+                            number = 2,
+                            title = "Check the coolant reservoir",
+                            body = "- Once it's cool, find the [Y]plastic coolant reservoir[/Y] — usually a translucent tank near the radiator with MIN / MAX marks.\n- Look at the level against the marks. Low or empty points to a leak.\n- Don't open the radiator cap yet — even cool engines can hold residual pressure.",
+                            diagramHint = "Reservoir tank — check MIN / MAX",
+                        ),
+                        WalkthroughStep(
+                            number = 3,
+                            title = "Top up and restart",
+                            body = "- Top up the reservoir with [Y]50/50 coolant mix[/Y] (or distilled water in a pinch).\n- Start the engine and watch the temperature gauge for [Y]two minutes[/Y].\n- If it climbs back into the red, [R]shut it off and call a tow[/R] — you're looking at a head-gasket or water-pump issue, not something to drive on.",
+                            diagramHint = "Watch the gauge — shut off if it climbs",
+                        ),
+                    ),
+                    mechanicDraft = """Hi — my 2009 Corolla (187k miles) threw a P0118 (coolant temp sensor circuit high). The sensor is reading well above the normal range at idle.
+
+I let it cool, checked the reservoir, and topped up the coolant. The code is still active. Could it be the sensor itself or am I looking at a real cooling-system issue (water pump, thermostat, head gasket)?
+
+Happy to bring it in when you have time.""",
+                    tripReadiness = TripReadiness(
+                        headline = "Don't drive until you've checked the coolant",
+                        caveat = "engine may overheat — pull over if the gauge climbs",
+                    ),
+                ),
             )
         )
     }

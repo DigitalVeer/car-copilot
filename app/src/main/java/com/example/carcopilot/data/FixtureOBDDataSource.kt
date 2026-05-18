@@ -17,13 +17,19 @@ import kotlinx.serialization.json.jsonPrimitive
  * Which fixture file under `app/src/main/assets/` to read. One-line edit
  * to switch the FIXTURE data source between scenarios for on-device smoke:
  *
- *   "misfire.json"          — 2009 Corolla, P0301 cylinder-1 misfire
- *   "hilux_fuel_rail.json"  — 2012 Hilux,   P0087 low fuel-rail pressure
+ *   "misfire.json"          — 2009 Corolla, P0301 cylinder-1 misfire (warning severity)
+ *   "hilux_fuel_rail.json"  — 2012 Hilux,   P0087 low fuel-rail pressure (warning)
+ *   "coolant_overheat.json" — 2009 Corolla, P0118 coolant sensor critical (severe)
+ *   "all_clear.json"        — 2009 Corolla, no DTCs, all readings normal (healthy)
+ *
+ * The severe + healthy fixtures exercise the SEVERITY rendering paths on
+ * Home / Issue / Walkthrough that the warning fixtures don't reach. Switch
+ * here, rebuild, reinstall — that's the whole iteration loop.
  *
  * Only consulted on FIXTURE builds — EMULATOR / BLUETOOTH paths use their
  * own data sources and ignore this constant.
  */
-private const val ACTIVE_FIXTURE = "hilux_fuel_rail.json"
+private const val ACTIVE_FIXTURE = "misfire.json"
 
 /**
  * Fixture-backed [OBDDataSource]. Reads the fixture named by
@@ -94,6 +100,7 @@ class FixtureOBDDataSource(private val context: Context) : OBDDataSource {
 
     private fun descriptionFor(code: String): String = when (code) {
         "P0301" -> "Cylinder 1 misfire detected"
+        "P0118" -> "Engine coolant temperature circuit high"
         else -> code
     }
 

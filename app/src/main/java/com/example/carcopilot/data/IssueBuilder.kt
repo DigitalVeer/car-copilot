@@ -1,8 +1,10 @@
 package com.example.carcopilot.data
 
 import com.example.carcopilot.model.Issue
+import com.example.carcopilot.model.IssueMeta
 import com.example.carcopilot.model.Route
 import com.example.carcopilot.model.Severity
+import com.example.carcopilot.model.TripReadiness
 
 /**
  * Assembles an [Issue] from an adapter [OBDSnapshot] plus the per-DTC
@@ -47,6 +49,32 @@ object IssueBuilder {
         )
     }
 
+    /**
+     * Synthesizes a Healthy [Issue] from a snapshot that has no DTCs.
+     *
+     * The driver still gets a Home page rather than the SnapshotViewer
+     * fallback: green severity bar, "Everything's good" headline, an
+     * "All clear for any trip" verdict strip. No walkthrough, no mechanic
+     * draft — there's no work to do. The DTC list stays empty so the
+     * Evidence section on the Issue screen reads as "no codes" rather
+     * than inventing one.
+     */
+    fun buildHealthy(snapshot: OBDSnapshot): Issue = Issue(
+        id = healthyId(snapshot.capturedAt),
+        vehicle = snapshot.vehicle,
+        severity = Severity.healthy,
+        route = Route.info,
+        category = "healthy",
+        title = "Everything's good",
+        subtitle = "No active fault codes. The car's reporting clean across the board.",
+        meta = IssueMeta(drivability = "all clear for any trip"),
+        dtcs = emptyList(),
+        liveReadings = snapshot.liveReadings,
+        walkthroughSteps = emptyList(),
+        mechanicDraft = null,
+        tripReadiness = TripReadiness(headline = "All clear for any trip"),
+    )
+
     private fun unknownEntry(code: String, description: String) = DTCEntry(
         code = code,
         description = description,
@@ -69,5 +97,11 @@ object IssueBuilder {
     private fun issueId(code: String, capturedAt: String): String {
         val compact = capturedAt.replace("-", "").replace(":", "")
         return "$compact-$code"
+    }
+
+    /** Sibling of [issueId] for the no-DTC healthy synthesis path. */
+    private fun healthyId(capturedAt: String): String {
+        val compact = capturedAt.replace("-", "").replace(":", "")
+        return "$compact-HEALTHY"
     }
 }

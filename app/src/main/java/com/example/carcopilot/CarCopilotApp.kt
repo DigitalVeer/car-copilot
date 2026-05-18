@@ -97,8 +97,13 @@ class CarCopilotApp : Application() {
         obd.readSnapshot()
             .onFailure { Log.w(TAG, "snapshot read failed: ${it.message}") }
             .getOrNull()
-            ?.takeIf { it.dtcs.isNotEmpty() }
-            ?.let { snapshot -> updateIfChanged(snapshot, dtcTable) }
+            ?.let { snapshot ->
+                if (snapshot.dtcs.isEmpty()) {
+                    updateToHealthy(snapshot)
+                } else {
+                    updateIfChanged(snapshot, dtcTable)
+                }
+            }
     }
 
     private fun updateIfChanged(snapshot: OBDSnapshot, dtcTable: DTCTable) {
@@ -110,6 +115,23 @@ class CarCopilotApp : Application() {
         _issueState.value = IssueBuilder.build(snapshot, dtcTable)
         _classificationState.value = RulesEngine.classify(snapshot)
         Log.i(TAG, "scenario updated → $incomingCode ($incomingVehicle)")
+    }
+
+    /**
+     * No-DTC snapshot — synthesize the Healthy Issue so the NavHost routes
+     * to HomeScreen with severity=healthy instead of falling through to the
+     * SnapshotViewer. Idempotent: if we already have a healthy Issue for
+     * this vehicle, leave it alone (don't churn the StateFlow on every
+     * poll tick when EMULATOR is the data source).
+     */
+    private fun updateToHealthy(snapshot: OBDSnapshot) {
+        val incomingVehicle = snapshot.vehicle.displayName
+        val current = _issueState.value
+        if (current?.severity == com.example.carcopilot.model.Severity.healthy &&
+            current.vehicle.displayName == incomingVehicle) return
+        _issueState.value = IssueBuilder.buildHealthy(snapshot)
+        _classificationState.value = null
+        Log.i(TAG, "scenario updated → HEALTHY ($incomingVehicle)")
     }
 
     companion object {
