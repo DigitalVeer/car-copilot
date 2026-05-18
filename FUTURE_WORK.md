@@ -71,6 +71,14 @@ LiteRT-LM 0.11.0 rejects a second `createConversation` while another session is 
 
 Surfaced from Will's `will/dev` branch alongside the `VehicleState` schema work that landed in Phase-12-prep. Will prototyped a JSON-asset DTC catalogue at `assets/rag/dtc_common.json` with ~15 scenarios, looked up at runtime instead of compiled into `DTCTable.DEFAULT`. Today's in-code table is fine because we have one entry (P0301); the moment we add a second the linear-growth comment in `DTCTable.kt` starts to bite. JSON-on-disk also opens the door to a vector-retrieval layer for fuzzy matches when an unknown DTC arrives. Worth picking up once the table has real breadth.
 
+### Per-DTC fallback synthesis on HomeScreen
+
+`model/Fallbacks.kt:8-9` hardcodes `FALLBACK_SYNTHESIS_MISFIRE` as a P0301-specific string used by HomeScreen's AI strip. HomeScreen does not stream from Gemma (live streaming runs in IssueScreen only), so it always renders this canned text.
+
+When the DTC table contained only P0301 this was correct; the P0171 entry added in `dc6d05a` exposed the mismatch — a P0171 Issue correctly renders P0171 specifics in the card, but the AI strip above says "Cylinder 1 keeps misfiring."
+
+Path forward: either (a) make HomeScreen a fourth live Gemma surface (adds latency to a screen that should feel fast), (b) move the canned fallback into `DTCTable` as a per-entry field, or (c) hide the AI strip on HomeScreen and run synthesis only on IssueScreen entry. (b) is the cheapest fix and aligns with how `walkthroughSteps` and `mechanicDraft` already live on `DTCEntry`.
+
 ## Hardware path (BLE OBD)
 
 ### Python TCP OBD emulator over WiFi
