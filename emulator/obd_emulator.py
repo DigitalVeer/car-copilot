@@ -222,12 +222,13 @@ def dtc_frame(dtcs: list, response_byte: str) -> str:
 # ── ELM327 session ────────────────────────────────────────────────────────────
 
 class ELM327Session:
-    def __init__(self, conn: socket.socket, scenario: dict):
+    def __init__(self, conn: socket.socket, scenario: dict, log=print):
         self.conn = conn
         self.scenario = scenario
         self.echo = True
         self.headers = False
         self.buf = ""
+        self._log = log
 
     def send(self, text: str):
         self.conn.sendall((text + "\r\r>").encode())
@@ -315,7 +316,7 @@ class ELM327Session:
         return f"7E8 {byte_count:02X} {resp}"
 
     def run(self):
-        print(f"  [+] client connected")
+        self._log("  [+] client connected")
         self.prompt()
         try:
             while True:
@@ -336,7 +337,7 @@ class ELM327Session:
         except (ConnectionResetError, BrokenPipeError, OSError):
             pass
         finally:
-            print(f"  [-] client disconnected")
+            self._log("  [-] client disconnected")
             self.conn.close()
 
 
@@ -352,7 +353,7 @@ def _tui(stdscr, current_scenario, scenarios, obd_port):
     cursor = 0
 
     while True:
-        stdscr.erase()
+        stdscr.clear()
         h, w = stdscr.getmaxyx()
 
         # Left panel is 24 chars wide; right panel gets the rest.
@@ -387,11 +388,18 @@ def _tui(stdscr, current_scenario, scenarios, obd_port):
                 _add(stdscr, row,     0, label)
                 _add(stdscr, row + 1, 2, dtcs[:lw - 2], curses.A_DIM)
 
-        bot = h - 5
+        with _conn_lock:
+            n = _conn_count[0]
+        conn_line = f" ● app connected" if n > 0 else " ○ waiting for app"
+        conn_attr = curses.color_pair(1) if n > 0 else curses.A_DIM
+
+        bot = h - 6
         _add(stdscr, bot,     0, "─" * lw)
-        _add(stdscr, bot + 1, 0, " ↑↓  navigate",  curses.A_DIM)
-        _add(stdscr, bot + 2, 0, " ↵   activate",  curses.A_DIM)
-        _add(stdscr, bot + 3, 0, " q   quit",      curses.A_DIM)
+        _add(stdscr, bot + 1, 0, conn_line, conn_attr)
+        _add(stdscr, bot + 2, 0, "─" * lw)
+        _add(stdscr, bot + 3, 0, " ↑↓  navigate",  curses.A_DIM)
+        _add(stdscr, bot + 4, 0, " ↵   activate",  curses.A_DIM)
+        _add(stdscr, bot + 5, 0, " q   quit",      curses.A_DIM)
 
         # Vertical divider
         for row in range(h):
@@ -437,7 +445,16 @@ def _add(stdscr, row, col, text, attr=0):
 
 # ── OBD TCP server ────────────────────────────────────────────────────────────
 
+_conn_lock = threading.Lock()
+_conn_count = [0]
+
+
 def _serve(host, port, current_scenario):
+    def _inc():
+        with _conn_lock: _conn_count[0] += 1
+    def _dec():
+        with _conn_lock: _conn_count[0] -= 1
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         srv.bind((host, port))
@@ -445,9 +462,12 @@ def _serve(host, port, current_scenario):
         while True:
             conn, _ = srv.accept()
             scenario = current_scenario[0]
-            threading.Thread(
-                target=ELM327Session(conn, scenario).run, daemon=True
-            ).start()
+            session = ELM327Session(conn, scenario, log=lambda *_: None)
+            _inc()
+            def _run(s=session):
+                try: s.run()
+                finally: _dec()
+            threading.Thread(target=_run, daemon=True).start()
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
