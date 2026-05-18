@@ -47,6 +47,13 @@ android {
         // use the host machine's LAN IP, e.g. -PobdHost=192.168.1.5.
         val obdHost = (project.findProperty("obdHost") as? String) ?: "10.0.2.2"
         buildConfigField("String", "OBD_EMULATOR_HOST", "\"$obdHost\"")
+
+        // EMULATOR-only: how often to re-poll the Python emulator for a new
+        // snapshot. Default 3 s is fast enough to catch a scenario switch
+        // without hammering the socket.
+        //   ./gradlew assembleDebug -PdataSource=EMULATOR -PpollInterval=1000
+        val pollInterval = (project.findProperty("pollInterval") as? String) ?: "3000"
+        buildConfigField("long", "POLL_INTERVAL_MS", "${pollInterval}L")
     }
 
     buildTypes {
