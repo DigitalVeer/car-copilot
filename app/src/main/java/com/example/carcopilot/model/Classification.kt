@@ -15,6 +15,8 @@ data class Classification(
     val confidence: Confidence,
     val likelyCause: String,
     val supportingSignals: List<String>,
+    val engineFamily: com.example.carcopilot.data.EngineFamily =
+        com.example.carcopilot.data.EngineFamily.UNKNOWN,
 )
 
 enum class Confidence { LOW, MEDIUM, HIGH }

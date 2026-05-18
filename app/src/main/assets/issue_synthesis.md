@@ -1,6 +1,6 @@
 Generate a synthesis for the following car issue.
 
-VEHICLE: {vehicle} ({mileage} miles)
+VEHICLE: {vehicle} ({mileage} miles, {engine_family} engine)
 CLASSIFICATION: {severity} severity, {route} route
 DIAGNOSED ISSUE: {title}
 SHORT DESCRIPTION: {subtitle}

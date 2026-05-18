@@ -24,12 +24,16 @@ object RulesEngine {
     fun classify(snapshot: OBDSnapshot): Classification {
         val code = snapshot.dtcs.firstOrNull()?.code ?: return noSignal()
         val readings = snapshot.liveReadings.associateBy { it.key }
-        return when {
-            code == "P0087" || code == "P1229" -> classifyFuelRail(code, readings)
-            code == "P0171"                     -> classifyLean(readings)
-            code.matches(Regex("P030[1-4]"))    -> classifyMisfire(code, readings)
-            else                                -> noSignal(code)
+        val result = when {
+            code == "P0087" || code == "P1229"       -> classifyFuelRail(code, readings)
+            code == "P0171"                           -> classifyLean(readings)
+            code == "P0300"                           -> classifyRandomMisfire(readings)
+            code.matches(Regex("P030[1-8]"))          -> classifyMisfire(code, readings)
+            code == "P0507"                           -> classifyIdleHigh(readings)
+            code.matches(Regex("P067[0-9]"))          -> classifyGlowPlug(code, readings)
+            else                                      -> noSignal(code)
         }
+        return result.copy(engineFamily = snapshot.engineFamily)
     }
 
     private fun classifyFuelRail(
@@ -150,6 +154,115 @@ object RulesEngine {
             else -> {
                 confidence = Confidence.MEDIUM
                 cause = "cylinder $cylinder misfire — ignition coil, spark plug, or injector"
+            }
+        }
+
+        return Classification(
+            primaryDtcCode = code,
+            severity = Severity.warning,
+            route = Route.diy,
+            confidence = confidence,
+            likelyCause = cause,
+            supportingSignals = signals,
+        )
+    }
+
+    private fun classifyRandomMisfire(readings: Map<String, LiveReading>): Classification {
+        val ltft = readings["Long-term fuel trim"]?.value?.toDoubleOrNull()
+        val maf  = readings["MAF sensor"]?.value?.toDoubleOrNull()
+        val rpm  = readings["RPM"]?.value?.toDoubleOrNull()
+        val signals = mutableListOf<String>()
+
+        val confidence: Confidence
+        val cause: String
+
+        when {
+            ltft != null && ltft >= 15 && maf != null && maf < 2.0 -> {
+                signals += "Long-term fuel trim at +${ltft.toInt()}% — the ECU has been adding extra fuel across all cylinders, which points to the fuel system rather than individual coils"
+                signals += "MAF reading ${maf} g/s — low, consistent with fuel starvation starving multiple cylinders at once"
+                if (rpm != null && rpm < 750) signals += "RPM at ${rpm.toInt()} — rough idle confirms multiple cylinders are affected"
+                confidence = Confidence.HIGH
+                cause = "fuel starvation — low MAF and high fuel trim together rule out individual coil failures"
+            }
+            ltft != null && ltft >= 10 -> {
+                signals += "Long-term fuel trim at +${ltft.toInt()}% — lean condition affecting multiple cylinders"
+                confidence = Confidence.MEDIUM
+                cause = "lean fuel delivery — dirty MAF or clogged air filter is the first thing to check"
+            }
+            else -> {
+                if (rpm != null && rpm < 750) signals += "RPM at ${rpm.toInt()} — rough idle from multiple cylinders misfiring"
+                confidence = Confidence.MEDIUM
+                cause = "multiple cylinder misfire — needs diagnosis to separate fuel, ignition, or compression issues"
+            }
+        }
+
+        return Classification(
+            primaryDtcCode = "P0300",
+            severity = Severity.severe,
+            route = Route.expert,
+            confidence = confidence,
+            likelyCause = cause,
+            supportingSignals = signals,
+        )
+    }
+
+    private fun classifyIdleHigh(readings: Map<String, LiveReading>): Classification {
+        val rpm  = readings["RPM"]?.value?.toDoubleOrNull()
+        val stft = readings["Short-term fuel trim"]?.value?.toDoubleOrNull()
+        val signals = mutableListOf<String>()
+
+        val confidence: Confidence
+        val cause: String
+
+        when {
+            rpm != null && rpm > 1000 && stft != null && stft < -3 -> {
+                signals += "RPM at ${rpm.toInt()} — well above the normal 750-800 idle range"
+                signals += "Short-term fuel trim at ${stft.toInt()}% — ECU cutting fuel to compensate for extra unmetered air entering through a leak"
+                confidence = Confidence.HIGH
+                cause = "vacuum leak — unmetered air is bypassing the MAF sensor and raising idle speed"
+            }
+            rpm != null && rpm > 1000 -> {
+                signals += "RPM at ${rpm.toInt()} — idle is running too fast"
+                confidence = Confidence.MEDIUM
+                cause = "idle control fault or vacuum leak — check the intake hose and idle air control valve"
+            }
+            else -> {
+                confidence = Confidence.LOW
+                cause = "idle speed too high — cause unclear from available readings"
+            }
+        }
+
+        return Classification(
+            primaryDtcCode = "P0507",
+            severity = Severity.warning,
+            route = Route.diy,
+            confidence = confidence,
+            likelyCause = cause,
+            supportingSignals = signals,
+        )
+    }
+
+    private fun classifyGlowPlug(code: String, readings: Map<String, LiveReading>): Classification {
+        val coolant = readings["Coolant temperature"]?.value?.toDoubleOrNull()
+        val battery = readings["Battery voltage"]?.value?.toDoubleOrNull()
+        val signals = mutableListOf<String>()
+
+        val confidence: Confidence
+        val cause: String
+
+        when {
+            coolant != null && coolant < 50 -> {
+                signals += "Coolant at ${coolant.toInt()}°C — cold start conditions where glow plugs are critical for ignition"
+                if (battery != null && battery < 12.3) {
+                    signals += "Battery at ${battery}V — lower than normal, consistent with the engine working hard to start without proper pre-heating"
+                }
+                confidence = Confidence.HIGH
+                cause = "failed glow plug — the cylinder isn't pre-heating before injection, making cold starts difficult or impossible"
+            }
+            else -> {
+                if (coolant != null) signals += "Coolant at ${coolant.toInt()}°C"
+                confidence = Confidence.MEDIUM
+                cause = "glow plug circuit fault — cold starting will be unreliable, especially in cool weather"
             }
         }
 

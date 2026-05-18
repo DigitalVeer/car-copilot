@@ -34,10 +34,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Classification
-import com.example.carcopilot.model.FALLBACK_GOOD_NEWS_MISFIRE
-import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.Severity
+import com.example.carcopilot.model.synthesizeFromClassification
 import com.example.carcopilot.ui.components.BottomTabBar
 import com.example.carcopilot.ui.components.EvidenceSection
 import com.example.carcopilot.ui.components.EvidenceToggle
@@ -65,10 +64,11 @@ fun IssueScreen(
     LaunchedEffect(issue.id) {
         // Wait for engine init to settle (may already be done if user lingered on Home).
         gemma.awaitReady()
+        val (fallbackSynthesis, fallbackGoodNews) = synthesizeFromClassification(classification, issue)
         if (gemma.initError != null) {
             state = SynthesisState.Ready(
-                synthesis = FALLBACK_SYNTHESIS_MISFIRE,
-                goodNews = FALLBACK_GOOD_NEWS_MISFIRE,
+                synthesis = fallbackSynthesis,
+                goodNews = fallbackGoodNews,
                 isFallback = true,
             )
             return@LaunchedEffect
@@ -81,8 +81,8 @@ fun IssueScreen(
                 onDone = { raw ->
                     state = if (raw.isEmpty()) {
                         SynthesisState.Ready(
-                            FALLBACK_SYNTHESIS_MISFIRE,
-                            FALLBACK_GOOD_NEWS_MISFIRE,
+                            fallbackSynthesis,
+                            fallbackGoodNews,
                             isFallback = true,
                         )
                     } else {
@@ -92,8 +92,8 @@ fun IssueScreen(
             )
         } catch (_: Throwable) {
             state = SynthesisState.Ready(
-                synthesis = FALLBACK_SYNTHESIS_MISFIRE,
-                goodNews = FALLBACK_GOOD_NEWS_MISFIRE,
+                synthesis = fallbackSynthesis,
+                goodNews = fallbackGoodNews,
                 isFallback = true,
             )
         }

@@ -119,13 +119,13 @@ class ComputeSupportedPidsTest(unittest.TestCase):
         # + continuation for 42
         self.assertEqual(emu.compute_supported_pids(pids, 0x00), "1E 1B 98 01")
 
-    def test_hilux_layout(self):
-        pids = ["0C", "05", "04", "0D", "11", "0F", "23", "42"]
-        # PIDs in 01-20: 04,05,0C,0D,0F,11 + continuation for 23,42
-        self.assertEqual(emu.compute_supported_pids(pids, 0x00), "18 1A 80 01")
+    def test_sparse_pid_layout(self):
+        # Fewer PIDs — only common ones + battery. No continuation above 0x20.
+        pids = ["0C", "05", "04", "0D", "42"]
+        self.assertEqual(emu.compute_supported_pids(pids, 0x00), "18 18 00 01")
 
-    def test_0120_range_for_hilux(self):
-        # PID 0x23 in 21-40 (offset 2 → bit 1<<29), continuation for 42 > 0x40.
+    def test_0120_range_with_high_pid(self):
+        # PID 0x23 sits in the 21-40 range (bit 1<<29); 42 above 0x40 sets continuation.
         pids = ["0C", "05", "23", "42"]
         self.assertEqual(emu.compute_supported_pids(pids, 0x20), "20 00 00 01")
 
@@ -211,7 +211,7 @@ class EncodeVinResponseTest(unittest.TestCase):
 class ScenarioInvariantsTest(unittest.TestCase):
     """Catches regressions in the SCENARIOS dict shape."""
 
-    REQUIRED_KEYS = ("name", "vin", "confirmed_dtcs", "pending_dtcs",
+    REQUIRED_KEYS = ("name", "vin", "vehicle_info", "confirmed_dtcs", "pending_dtcs",
                      "permanent_dtcs", "pids", "freeze_frame")
 
     def test_all_scenarios_have_required_keys(self):
@@ -263,10 +263,24 @@ class ScenarioInvariantsTest(unittest.TestCase):
                     )
                     int(tok, 16)  # raises ValueError if not hex
 
-    def test_misfire_scenario_emits_p0301(self):
-        # The whole reason we added the misfire scenario — it must match
-        # what the Android demo's misfire.json fixture expects.
-        self.assertIn("P0301", emu.SCENARIOS["misfire"]["confirmed_dtcs"])
+    def test_corolla_coil_emits_p0301(self):
+        self.assertIn("P0301", emu.SCENARIOS["corolla_coil"]["confirmed_dtcs"])
+
+    def test_vehicle_info_has_required_fields(self):
+        required = ("year", "make", "model", "mileage", "displayName", "engineFamily")
+        for key, s in emu.SCENARIOS.items():
+            info = s["vehicle_info"]
+            for field in required:
+                self.assertIn(field, info,
+                              f"scenario {key!r}: vehicle_info missing {field!r}")
+            self.assertIn(info["engineFamily"], ("PETROL", "DIESEL", "UNKNOWN"),
+                          f"scenario {key!r}: unknown engineFamily {info['engineFamily']!r}")
+
+    def test_diesel_scenarios_have_diesel_engine_family(self):
+        diesel_keys = ("hilux_fuel", "hilux_glow", "l200_egr", "l200_fuel")
+        for key in diesel_keys:
+            self.assertEqual(emu.SCENARIOS[key]["vehicle_info"]["engineFamily"], "DIESEL",
+                             f"{key} should be DIESEL")
 
     def test_corolla_is_default_scenario(self):
         # main()'s argparse default is "corolla" — protect that contract.
@@ -322,7 +336,7 @@ class EmulatorEndToEndTest(unittest.TestCase):
         cls.port = _free_port()
         cls.stop = threading.Event()
         cls.thread = threading.Thread(
-            target=_run_server, args=("misfire", cls.port, cls.stop), daemon=True,
+            target=_run_server, args=("corolla_coil", cls.port, cls.stop), daemon=True,
         )
         cls.thread.start()
         # Wait briefly for the listener to be ready.
@@ -393,13 +407,13 @@ class EmulatorEndToEndTest(unittest.TestCase):
     def test_0100_returns_supported_pid_bitmap(self):
         self._send("ATE0")
         resp = self._send("0100")
-        # The misfire scenario shares corolla's PID layout → same bitmap.
+        # Coil scenario shares corolla's PID layout → same bitmap.
         self.assertIn("41 00 1E 1B 98 01", resp)
 
-    def test_010C_returns_misfire_idle_rpm(self):
+    def test_010C_returns_coil_idle_rpm(self):
         self._send("ATE0")
         resp = self._send("010C")
-        # Misfire scenario idles at 680 rpm → 0x0AA0.
+        # Coil scenario idles at 680 rpm → 0x0AA0.
         self.assertIn("41 0C 0A A0", resp)
 
     def test_unknown_pid_returns_no_data(self):
@@ -422,8 +436,8 @@ class EmulatorEndToEndTest(unittest.TestCase):
         self.assertIn("0: 49 02 01", resp)    # first frame
         self.assertIn("1:", resp)             # second frame marker
         self.assertIn("2:", resp)             # third frame marker
-        # First 3 chars of the misfire scenario VIN are 4T1 (0x34 0x54 0x31).
-        self.assertIn("34 54 31", resp)
+        # First 3 chars of the shared VIN (JTDBR...) are J=0x4A T=0x54 D=0x44.
+        self.assertIn("4A 54 44", resp)
 
     def test_mode_09_pid_00_advertises_only_pid_02(self):
         self._send("ATE0")

@@ -71,6 +71,7 @@ class PromptBuilder(context: Context) {
             .replace("{drivability}", issue.meta.drivability ?: "—")
             .replace("{dtcs}", formatDtcs(issue.dtcs))
             .replace("{live_readings}", formatReadings(issue.liveReadings))
+            .replace("{engine_family}", classification?.engineFamily?.name?.lowercase() ?: "unknown")
             .replace("{supporting_signals}", formatSupportingSignals(classification))
             .replace("{rag_context}", ragContext)
             .replace("{language}", language)

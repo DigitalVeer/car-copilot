@@ -33,10 +33,10 @@ data class DTCEntry(
     val route: Route,
     val title: String,
     val subtitle: String,
-    val meta: IssueMeta,
-    val walkthroughSteps: List<WalkthroughStep>,
-    val mechanicDraft: String,
-    val tripReadiness: TripReadiness,
+    val meta: IssueMeta = IssueMeta(),
+    val walkthroughSteps: List<WalkthroughStep> = emptyList(),
+    val mechanicDraft: String? = null,
+    val tripReadiness: TripReadiness? = null,
     /**
      * Engine-bay diagram targets the walkthrough screen falls back to when a
      * plan step has no specific keyword match. For misfire codes this is the
@@ -62,8 +62,11 @@ data class DTCEntry(
 class DTCTable(private val entries: Map<String, DTCEntry>) {
     fun lookup(code: String): DTCEntry? = entries[code]
 
+    /** Returns a new table that includes [thin] entries, with this table's entries winning on conflict. */
+    fun withThin(thin: Map<String, DTCEntry>): DTCTable = DTCTable(thin + entries)
+
     companion object {
-        /** The production table. One entry today; add more as data work. */
+        /** Deep entries only. Use [withThin] at runtime to add universal coverage. */
         val DEFAULT: DTCTable = DTCTable(
             mapOf(
                 "P0301" to DTCEntry(
