@@ -14,10 +14,22 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Fixture-backed [OBDDataSource]. Reads misfire.json from assets, decodes
- * live PIDs against [ReadingSpec], and returns a snapshot equivalent to
- * what the legacy [com.example.carcopilot.model.Fixtures.loadMisfireIssue]
- * path produces.
+ * Which fixture file under `app/src/main/assets/` to read. One-line edit
+ * to switch the FIXTURE data source between scenarios for on-device smoke:
+ *
+ *   "misfire.json"          — 2009 Corolla, P0301 cylinder-1 misfire
+ *   "hilux_fuel_rail.json"  — 2012 Hilux,   P0087 low fuel-rail pressure
+ *
+ * Only consulted on FIXTURE builds — EMULATOR / BLUETOOTH paths use their
+ * own data sources and ignore this constant.
+ */
+private const val ACTIVE_FIXTURE = "misfire.json"
+
+/**
+ * Fixture-backed [OBDDataSource]. Reads the fixture named by
+ * [ACTIVE_FIXTURE] from assets, decodes live PIDs against [ReadingSpec],
+ * and returns a snapshot equivalent to what the legacy
+ * [com.example.carcopilot.model.Fixtures.loadMisfireIssue] path produces.
  *
  * Description-for-code lookup is local to this file in 11A — it's the
  * fixture's stand-in for the adapter's onboard DTC description database.
@@ -34,7 +46,7 @@ class FixtureOBDDataSource(private val context: Context) : OBDDataSource {
     override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
     override suspend fun readSnapshot(): Result<OBDSnapshot> = runCatching {
-        val raw = context.assets.open("misfire.json").bufferedReader().use { it.readText() }
+        val raw = context.assets.open(ACTIVE_FIXTURE).bufferedReader().use { it.readText() }
         val fixture = Json.parseToJsonElement(raw) as JsonObject
         val vehicleJson = fixture["vehicle"] as JsonObject
         val liveData = fixture["live_data"] as JsonObject
