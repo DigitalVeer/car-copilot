@@ -150,17 +150,14 @@ class IssueBuilderTest {
     }
 
     @Test
-    fun `throws when primary DTC is not in the table`() {
+    fun `unknown DTC falls back to generic entry instead of throwing`() {
         val snap = snapshot(dtcs = listOf(DTC("P9999", "Unknown fault")))
-        try {
-            IssueBuilder.build(snap, DTCTable.DEFAULT)
-            fail("expected IllegalStateException for unknown DTC")
-        } catch (e: IllegalStateException) {
-            assertTrue(
-                "error message should mention the unknown code",
-                e.message?.contains("P9999") == true,
-            )
-        }
+        val issue = IssueBuilder.build(snap, DTCTable.DEFAULT)
+        assertEquals("P9999", issue.dtcs.first().code)
+        assertTrue(
+            "title should surface the raw description",
+            issue.title.contains("Unknown fault"),
+        )
     }
 
     // ── adapter-layer fields not yet surfaced in Issue ────────────────────────

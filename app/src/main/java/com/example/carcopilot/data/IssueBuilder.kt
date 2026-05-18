@@ -1,6 +1,8 @@
 package com.example.carcopilot.data
 
 import com.example.carcopilot.model.Issue
+import com.example.carcopilot.model.Route
+import com.example.carcopilot.model.Severity
 
 /**
  * Assembles an [Issue] from an adapter [OBDSnapshot] plus the per-DTC
@@ -27,8 +29,7 @@ object IssueBuilder {
     fun build(snapshot: OBDSnapshot, dtcTable: DTCTable): Issue {
         val primary = snapshot.dtcs.firstOrNull()
             ?: error("OBDSnapshot has no DTCs; nothing to classify.")
-        val entry = dtcTable.lookup(primary.code)
-            ?: error("Unknown DTC ${primary.code} — no entry in DTCTable.")
+        val entry = dtcTable.lookup(primary.code) ?: unknownEntry(primary.code, primary.description)
         return Issue(
             id = issueId(primary.code, snapshot.capturedAt),
             vehicle = snapshot.vehicle,
@@ -41,10 +42,25 @@ object IssueBuilder {
             dtcs = snapshot.dtcs,
             liveReadings = snapshot.liveReadings,
             walkthroughSteps = entry.walkthroughSteps,
-            mechanicDraft = entry.mechanicDraft,
+            mechanicDraft = entry.mechanicDraft ?: genericDraft(primary.code, primary.description),
             tripReadiness = entry.tripReadiness,
         )
     }
+
+    private fun unknownEntry(code: String, description: String) = DTCEntry(
+        code = code,
+        description = description,
+        category = "unknown",
+        severity = Severity.warning,
+        route = Route.expert,
+        title = description,
+        subtitle = "Your car flagged a fault. Have a mechanic take a look to confirm what's going on.",
+    )
+
+    private fun genericDraft(code: String, description: String) =
+        "Hi — my car is showing a $code fault ($description). " +
+        "Could you take a look and let me know what's involved? " +
+        "Happy to bring it in at your convenience."
 
     /**
      * Mirrors the legacy id format `<compact UTC timestamp>-<DTC>`:

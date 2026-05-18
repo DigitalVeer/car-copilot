@@ -10,6 +10,7 @@ import com.example.carcopilot.data.IssueBuilder
 import com.example.carcopilot.data.OBDDataSource
 import com.example.carcopilot.data.RulesEngine
 import com.example.carcopilot.data.TcpOBDDataSource
+import com.example.carcopilot.data.ThinDtcLoader
 import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Classification
 import com.example.carcopilot.model.Issue
@@ -88,6 +89,8 @@ class CarCopilotApp : Application() {
         // we let SnapshotViewerScreen drive that flow. Fixture and emulator
         // can read synchronously here so the NavHost composes against a
         // ready Issue and the user doesn't see a one-frame empty state.
+        val dtcTable = DTCTable.DEFAULT.withThin(ThinDtcLoader.load(this))
+
         if (BuildConfig.DATA_SOURCE != "BLUETOOTH") {
             runBlocking {
                 obd.readSnapshot()
@@ -95,7 +98,7 @@ class CarCopilotApp : Application() {
                     .getOrNull()
                     ?.takeIf { it.dtcs.isNotEmpty() }
                     ?.let { snapshot ->
-                        initialIssue = IssueBuilder.build(snapshot, DTCTable.DEFAULT)
+                        initialIssue = IssueBuilder.build(snapshot, dtcTable)
                         initialClassification = RulesEngine.classify(snapshot)
                     }
             }
