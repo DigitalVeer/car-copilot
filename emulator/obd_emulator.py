@@ -13,16 +13,23 @@ Usage:
     python3 obd_emulator.py --cycle 5 --scenario misfire  # start at misfire, then cycle
     python3 obd_emulator.py --port 35000
     python3 obd_emulator.py --list
+
+    # Interactive control panel in the browser (open http://localhost:35001)
+    python3 obd_emulator.py --panel
+    python3 obd_emulator.py --panel --panel-port 8080
 """
 
 import itertools
+import json
 import socket
 import threading
 import time
 import argparse
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 HOST = "0.0.0.0"
 PORT = 35000
+PANEL_PORT = 35001
 
 
 # ── Scenario definitions ──────────────────────────────────────────────────────
@@ -336,6 +343,135 @@ class ELM327Session:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+PANEL_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Car Copilot · Scenario Panel</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{font-family:-apple-system,system-ui,sans-serif;background:#0d0d0d;color:#e0e0e0;padding:2rem}}
+  header{{margin-bottom:1.75rem}}
+  h1{{font-size:0.8rem;letter-spacing:.12em;text-transform:uppercase;color:#555;margin-bottom:.25rem}}
+  .subtitle{{font-size:.8rem;color:#444}}
+  .grid{{display:flex;gap:1rem;flex-wrap:wrap}}
+  .card{{background:#161616;border:2px solid #252525;border-radius:14px;padding:1.25rem;width:300px;transition:border-color .2s}}
+  .card.active{{border-color:#22c55e}}
+  .name{{font-size:.9rem;font-weight:500;line-height:1.45;margin-bottom:.6rem}}
+  .dtcs{{font-family:'SF Mono','Fira Code',monospace;font-size:.8rem;color:#f59e0b;margin-bottom:.35rem}}
+  .pending{{font-size:.75rem;color:#555;margin-bottom:1rem}}
+  .btn{{width:100%;padding:.5rem;border:none;border-radius:8px;font-size:.82rem;cursor:pointer;background:#222;color:#ccc;transition:background .15s}}
+  .btn:hover:not(:disabled){{background:#2e2e2e}}
+  .card.active .btn{{background:#22c55e;color:#000;font-weight:600;cursor:default}}
+  .badge{{display:inline-block;background:#22c55e;color:#000;font-size:.62rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:.5rem;vertical-align:middle}}
+  footer{{margin-top:2rem;font-size:.72rem;color:#383838}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Car Copilot &middot; Scenario Panel</h1>
+  <div class="subtitle">App polls every 3 s &mdash; select a scenario and watch the card update.</div>
+</header>
+<div class="grid" id="grid"></div>
+<footer id="footer">connecting&hellip;</footer>
+<script>
+const SCENARIOS={scenarios_json};
+let active=null;
+
+function render(){{
+  const grid=document.getElementById('grid');
+  grid.innerHTML='';
+  Object.entries(SCENARIOS).forEach(([key,s])=>{{
+    const isActive=key===active;
+    const card=document.createElement('div');
+    card.className='card'+(isActive?' active':'');
+    card.innerHTML=`
+      <div class="name">${{s.name}}${{isActive?'<span class="badge">ACTIVE</span>':''}}</div>
+      <div class="dtcs">${{s.confirmed_dtcs.join(', ')||'(no DTCs)'}}</div>
+      <div class="pending">${{s.pending_dtcs.length?'Pending: '+s.pending_dtcs.join(', '):'No pending codes'}}</div>
+      <button class="btn" ${{isActive?'disabled':''}} onclick="switchTo('${{key}}')">${{isActive?'Active':'Select'}}</button>
+    `;
+    grid.appendChild(card);
+  }});
+  document.getElementById('footer').textContent='Updated '+new Date().toLocaleTimeString();
+}}
+
+async function switchTo(key){{
+  await fetch('/switch',{{method:'POST',body:key}});
+  await poll();
+}}
+
+async function poll(){{
+  try{{
+    const r=await fetch('/state');
+    const d=await r.json();
+    if(d.active!==active){{active=d.active;render();}}
+    else{{document.getElementById('footer').textContent='Updated '+new Date().toLocaleTimeString();}}
+  }}catch(e){{document.getElementById('footer').textContent='Reconnecting...';}}
+}}
+
+poll();
+setInterval(poll,2000);
+</script>
+</body>
+</html>"""
+
+
+def make_panel_handler(current_scenario, scenarios):
+    """Return an HTTP handler class wired to the shared current_scenario state."""
+
+    class PanelHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/state":
+                self._json({"active": self._active_key()})
+            else:
+                html = PANEL_HTML.replace(
+                    "{scenarios_json}",
+                    json.dumps({
+                        k: {
+                            "name": v["name"],
+                            "confirmed_dtcs": v["confirmed_dtcs"],
+                            "pending_dtcs": v["pending_dtcs"],
+                        }
+                        for k, v in scenarios.items()
+                    }),
+                )
+                body = html.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", len(body))
+                self.end_headers()
+                self.wfile.write(body)
+
+        def do_POST(self):
+            if self.path == "/switch":
+                length = int(self.headers.get("Content-Length", 0))
+                key = self.rfile.read(length).decode().strip()
+                if key in scenarios:
+                    current_scenario[0] = scenarios[key]
+                    print(f"\n  → switched to: {scenarios[key]['name']}")
+            self._json({"active": self._active_key()})
+
+        def _active_key(self):
+            for k, v in scenarios.items():
+                if v is current_scenario[0]:
+                    return k
+            return None
+
+        def _json(self, data):
+            body = json.dumps(data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", len(body))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            pass  # suppress per-request logs
+
+    return PanelHandler
+
+
 def _print_scenario(scenario: dict, cycle_secs: int = 0) -> None:
     label = f"  (switching every {cycle_secs}s)" if cycle_secs else ""
     print(f"  → {scenario['name']}{label}")
@@ -348,6 +484,10 @@ def main():
                         help="Starting scenario (default: corolla)")
     parser.add_argument("--cycle", type=int, default=0, metavar="SECS",
                         help="Rotate through all scenarios every N seconds (0 = disabled)")
+    parser.add_argument("--panel", action="store_true",
+                        help="Start the browser control panel (http://localhost:PANEL_PORT)")
+    parser.add_argument("--panel-port", type=int, default=PANEL_PORT,
+                        help=f"Port for the control panel (default: {PANEL_PORT})")
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--host", default=HOST)
     parser.add_argument("--list", action="store_true", help="List available scenarios and exit")
@@ -374,6 +514,12 @@ def main():
 
     print(f"Car Copilot OBD Emulator  —  {args.host}:{args.port}")
     _print_scenario(current_scenario[0], args.cycle)
+
+    if args.panel:
+        handler = make_panel_handler(current_scenario, SCENARIOS)
+        panel = HTTPServer(("0.0.0.0", args.panel_port), handler)
+        threading.Thread(target=panel.serve_forever, daemon=True).start()
+        print(f"  panel    : http://localhost:{args.panel_port}")
     print()
 
     if args.cycle:
