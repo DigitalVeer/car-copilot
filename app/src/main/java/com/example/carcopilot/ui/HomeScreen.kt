@@ -29,7 +29,6 @@ import com.example.carcopilot.ui.components.IssueCard
 import com.example.carcopilot.ui.components.Tab
 import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
-import com.example.carcopilot.ui.components.TripReadinessTile
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
 import kotlinx.coroutines.delay
@@ -89,19 +88,25 @@ fun HomeScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 20.dp),
         ) {
+            // Trip readiness rides inside the AI strip as its verdict footer
+            // ("Safe for short trips", "Don't drive", "All clear") so it
+            // shares the accent rail with the AI body — one chip, not two
+            // floating tiles. Previously a separate soft card beneath.
             AnimatedAIStrip(
                 state = state,
                 label = "Today's drive",
                 severity = misfire.severity,
+                verdict = misfire.tripReadiness?.let { readiness ->
+                    {
+                        AiStripVerdict(
+                            label = "TRIP READY",
+                            headline = readiness.headline,
+                            severity = misfire.severity,
+                            caveat = readiness.caveat,
+                        )
+                    }
+                },
             )
-            // Trip readiness sits directly below the AI strip — the single
-            // sentence the driver most needs to see ("Safe for short trips",
-            // "Don't drive", "All clear"). Buried under the IssueCard it
-            // lived below the fold on most phones.
-            misfire.tripReadiness?.let { readiness ->
-                TripReadinessTile(readiness = readiness, severity = misfire.severity)
-                Spacer(Modifier.height(22.dp))
-            }
             // The healthy variant has no diagnosed issue, so the ACTIVE
             // ISSUE heading + tappable IssueCard don't apply. Warning and
             // severe variants both surface the focal card.

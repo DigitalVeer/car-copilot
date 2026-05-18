@@ -27,14 +27,18 @@ sealed interface WalkthroughPipelineState {
 
     /**
      * Plan is parsed; currently streaming the body for plan step at
-     * [currentIdx] (zero-indexed) out of [total]. The loader label renders
-     * "Building step ${currentIdx + 1} of $total" — a count, not a title,
-     * since the title belongs to the user-facing step view that comes after.
+     * [currentIdx] (zero-indexed) inside [plan]. The skeleton loader uses
+     * the full plan to render each row with its real title — the active row
+     * pulses, completed rows show ✓, queued rows wait — so the user can see
+     * the procedure shaping up before the bodies finish streaming. [total]
+     * is derived from `plan.size` for callers that just need a count.
      */
     data class BuildingStep(
+        val plan: List<PlanStep>,
         val currentIdx: Int,
-        val total: Int,
-    ) : WalkthroughPipelineState
+    ) : WalkthroughPipelineState {
+        val total: Int get() = plan.size
+    }
 
     /**
      * All step bodies are cached and the walkthrough is interactive. Advancing

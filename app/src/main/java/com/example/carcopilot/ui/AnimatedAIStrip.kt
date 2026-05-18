@@ -1,5 +1,6 @@
 package com.example.carcopilot.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -9,6 +10,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,7 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.carcopilot.model.Severity
 import com.example.carcopilot.ui.components.OnDeviceChip
 import com.example.carcopilot.ui.components.ThinkingDots
@@ -47,13 +52,21 @@ private const val GLOW_TRANSITION_MS = 250
 
 /**
  * The hero component. A 2dp severity-colored bar runs the full height of the
- * label + body column. Body shape depends on SynthesisState:
+ * label + body + (optional) verdict column. Body shape depends on SynthesisState:
  *   - Thinking  → ThinkingDots
  *   - Streaming → partial text
  *   - Ready     → synthesis, optionally followed by good_news
  * The label color matches the severity. `isFallback` is intentionally not
  * surfaced — the user just sees the canned text; the diagnostic signal lives
  * in logs.
+ *
+ * The [verdict] slot is rendered inside the same accent-rail column as the
+ * AI body, separated by a hairline divider. The Trip-Ready (Home) and
+ * Drivability (Issue) blocks live here so they read as the AI strip's own
+ * verdict footer rather than free-floating tiles beneath it. The verdict
+ * is gated on [SynthesisState.Ready] and fades + expands in once the AI
+ * body has resolved — appearing mid-stream felt premature on the Issue
+ * page, where Gemma takes several seconds to draft the synthesis.
  */
 @Composable
 fun AnimatedAIStrip(
@@ -62,6 +75,7 @@ fun AnimatedAIStrip(
     severity: Severity,
     modifier: Modifier = Modifier,
     outerPadding: PaddingValues = PaddingValues(bottom = 32.dp),
+    verdict: (@Composable () -> Unit)? = null,
 ) {
     val accentFill = severity.accentColor()
     val accentInline = severity.accentInlineColor()
@@ -85,14 +99,81 @@ fun AnimatedAIStrip(
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(10.dp))
-                    OnDeviceChip(
-                        severity = severity,
-                        breathing = state is SynthesisState.Thinking,
-                    )
+                    OnDeviceChip(severity = severity)
                 }
                 Spacer(Modifier.height(12.dp))
                 AiBody(state = state, severity = severity)
+                if (verdict != null) {
+                    AnimatedVisibility(
+                        visible = state is SynthesisState.Ready,
+                        enter = expandVertically(
+                            animationSpec = tween(durationMillis = 360),
+                        ) + fadeIn(animationSpec = tween(durationMillis = 320, delayMillis = 80)),
+                    ) {
+                        Column {
+                            Spacer(Modifier.height(16.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(CarCopilotColors.Line),
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            verdict()
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+/**
+ * Verdict footer used inside the AI strip — small mono label stacked above
+ * a severity-tinted headline. The headline is the "so what" of the chip
+ * (Drivability: "Stop driving — engine may overheat"; Trip readiness:
+ * "All clear for any trip") so it earns:
+ *
+ *   - Its own row, not sharing a line with the label.
+ *   - 17sp Medium, larger and heavier than the AI body's 15sp Normal.
+ *   - The rail's accentInline color, so the AI label up top and the
+ *     verdict at the bottom frame the strip in matching severity color
+ *     with dark explanation in between. Severe drivability reads urgent
+ *     red, healthy trip-readiness reads green, warning reads indigo.
+ *
+ * No card frame, no severity dot — the strip's rail already carries
+ * severity; doubling it would be noise.
+ */
+@Composable
+fun AiStripVerdict(
+    label: String,
+    headline: String,
+    severity: Severity,
+    caveat: String? = null,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = CarCopilotTypography.SectionLabel,
+            color = CarCopilotColors.TextMute,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = headline.replaceFirstChar { it.uppercaseChar() },
+            style = CarCopilotTypography.CardSubtitle.copy(
+                fontSize = 17.sp,
+                lineHeight = 22.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = severity.accentInlineColor(),
+        )
+        caveat?.let { c ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = c,
+                style = CarCopilotTypography.CardSubtitle.copy(fontSize = 13.sp),
+                color = CarCopilotColors.TextMute,
+            )
         }
     }
 }

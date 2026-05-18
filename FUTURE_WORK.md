@@ -55,7 +55,7 @@ When picking this back up, set up a tiny on-device benchmark harness (one `Launc
 
 ### Few-shot prewarm payload
 
-The dummy `"ok"` turn in `GemmaService.prewarmJob` is unavoidable context pollution at the SDK level (no prefill-only API on Kotlin 0.11.0, no rollback after `cancelProcess`), but the *content* of the pollution is ours to design. A purpose-built prewarm — a one-line user message plus a one-line ideal assistant response in the target voice and exact JSON shape — could turn the pollution from a cost into a few-shot voice anchor. Plausibly recovers the slight phrasing drift we currently see post-prewarm while keeping the 24% latency win. Cheap to try.
+**Shipped.** The prewarm user message in `GemmaService.prewarmJob` is now a `PREWARM_FEW_SHOT` constant carrying one worked example (2015 Corolla / P0301 input → ideal JSON output in target voice) plus a request for an "ok" ack. The cancellation-after-first-token mechanic is unchanged, so the ~24% latency win is intact; the difference is that the cancelled-mid-decode pollution now contains a voice-and-shape anchor the model has just seen when the first real synthesis call arrives. Worth a side-by-side on a real device session to confirm the voice drift recovery, but no measurable downside since the SDK-side mechanics (cancelProcess, settle delay, mutex) didn't change.
 
 ### Unbounded conversation history
 

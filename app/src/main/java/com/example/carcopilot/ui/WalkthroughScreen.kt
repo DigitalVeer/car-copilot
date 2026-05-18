@@ -179,7 +179,7 @@ fun WalkthroughScreen(
         val totalSteps = planSteps.size
         val rendered = mutableListOf<RenderedStep>()
         for ((idx, planStep) in planSteps.withIndex()) {
-            pipelineState = WalkthroughPipelineState.BuildingStep(currentIdx = idx, total = totalSteps)
+            pipelineState = WalkthroughPipelineState.BuildingStep(plan = planSteps, currentIdx = idx)
             val cannedFallback = cannedSteps.getOrNull(idx)?.body ?: GENERIC_STEP_FALLBACK
             val stepBuf = StringBuilder()
             val parsed: WalkthroughStepState.Ready = try {
@@ -225,7 +225,7 @@ fun WalkthroughScreen(
                 label = "walkthrough-loading-to-content",
             ) { contentReady ->
                 if (!contentReady || ready == null) {
-                    WalkthroughLoadingPage()
+                    WalkthroughLoadingPage(state = pipelineState)
                 } else {
                     WalkthroughContent(
                         rendered = ready,
