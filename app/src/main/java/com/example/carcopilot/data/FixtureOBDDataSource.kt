@@ -17,10 +17,10 @@ import kotlinx.serialization.json.jsonPrimitive
  * Which fixture file under `app/src/main/assets/` to read. One-line edit
  * to switch the FIXTURE data source between scenarios for on-device smoke:
  *
- *   "misfire.json"          — 2009 Corolla, P0301 cylinder-1 misfire (warning severity)
- *   "hilux_fuel_rail.json"  — 2012 Hilux,   P0087 low fuel-rail pressure (warning)
- *   "coolant_overheat.json" — 2009 Corolla, P0118 coolant sensor critical (severe)
- *   "all_clear.json"        — 2009 Corolla, no DTCs, all readings normal (healthy)
+ *   "misfire.json"          — 2021 VW Jetta, P0301 cylinder-1 misfire (warning severity)
+ *   "hilux_fuel_rail.json"  — 2012 Hilux,    P0087 low fuel-rail pressure (warning)
+ *   "coolant_overheat.json" — 2009 Corolla,  P0118 coolant sensor critical (severe)
+ *   "all_clear.json"        — 2009 Corolla,  no DTCs, all readings normal (healthy)
  *
  * The severe + healthy fixtures exercise the SEVERITY rendering paths on
  * Home / Issue / Walkthrough that the warning fixtures don't reach. Switch
@@ -71,9 +71,9 @@ class FixtureOBDDataSource(private val context: Context) : OBDDataSource {
             capturedAt = capturedAt,
             vehicle = vehicle,
             // Honor the fixture's engine_family if present (e.g. the hilux
-            // diesel scenario sets DIESEL); the legacy misfire fixture
-            // doesn't carry the field, so fall back to PETROL — the 2009
-            // Corolla 1ZZ-FE that the original demo targets. UNKNOWN is
+            // diesel scenario sets DIESEL); the misfire fixture doesn't
+            // carry the field, so fall back to PETROL — the EA211 1.4 TSI
+            // in the 2021 VW Jetta that the live demo targets. UNKNOWN is
             // reserved for real-hardware snapshots that arrive before VIN
             // decode runs.
             engineFamily = parseEngineFamily(fixture["engine_family"]?.jsonPrimitive?.content),

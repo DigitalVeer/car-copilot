@@ -31,7 +31,7 @@ data class HistoryPattern(
 object History {
     val PATTERN = HistoryPattern(
         label = "Pattern I've noticed",
-        body = "You've replaced an ignition coil before — back in October. Two coils in seven months is faster than normal on a Corolla. Usually means oil is leaking past the valve cover gasket and fouling them. Worth mentioning to a mechanic at your next service.",
+        body = "You've replaced an ignition coil before — back in October. Two coils in seven months isn't surprising on a TSI; these little EA211 coils are known to fail early, and once one goes the others usually follow within a year. Worth picking up a spare set so you're not caught out on the next one.",
     )
 
     val STATS = HistoryStats(

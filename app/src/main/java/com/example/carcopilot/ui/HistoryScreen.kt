@@ -85,7 +85,7 @@ fun HistoryScreen(
             .fillMaxSize()
             .background(CarCopilotColors.PhoneBg),
     ) {
-        TopBar(left = TopBarLeft.Brand(vehicleSubtitle = "History · 2009 Corolla"))
+        TopBar(left = TopBarLeft.Brand(vehicleSubtitle = "History · 2021 VW Jetta"))
         Column(
             modifier = Modifier
                 .fillMaxWidth()

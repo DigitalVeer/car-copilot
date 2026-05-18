@@ -58,8 +58,8 @@ class CarCopilotApp : Application() {
                 host = BuildConfig.OBD_EMULATOR_HOST,
                 port = 35000,
                 vehicle = VehicleInfo(
-                    year = 2009, make = "Toyota", model = "Corolla",
-                    mileage = 187_000, displayName = "2009 Corolla",
+                    year = 2021, make = "Volkswagen", model = "Jetta",
+                    mileage = 42_000, displayName = "2021 VW Jetta",
                 ),
                 engineFamily = EngineFamily.PETROL,
             )

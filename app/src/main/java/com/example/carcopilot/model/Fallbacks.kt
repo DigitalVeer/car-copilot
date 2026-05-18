@@ -13,7 +13,7 @@ package com.example.carcopilot.model
  * by primary DTC code, falling back to the misfire text for unknown codes.
  */
 const val FALLBACK_SYNTHESIS_MISFIRE: String =
-    "Cylinder 1 keeps [Y]misfiring[/Y] — you'll feel it as a stumble at idle. On older Corollas this is almost always a worn [Y]ignition coil[/Y]."
+    "Cylinder 1 keeps [Y]misfiring[/Y] — you'll feel it as a stumble at idle. On the EA211 TSI engine in this Jetta, a tired [Y]ignition coil[/Y] is almost always the cause."
 
 const val FALLBACK_GOOD_NEWS_MISFIRE: String =
     "It's a [Y]30-minute fix[/Y] and you can do it yourself. I'll walk you through it."
