@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.data.DTCTable
-import com.example.carcopilot.data.DiagramTarget
 import com.example.carcopilot.data.WalkthroughSpec
 import com.example.carcopilot.data.highlightsForPlanStep
 import com.example.carcopilot.inference.GemmaService
@@ -39,8 +38,9 @@ import com.example.carcopilot.model.Issue
 import com.example.carcopilot.model.Severity
 import com.example.carcopilot.model.WalkthroughStep
 import com.example.carcopilot.ui.components.BottomTabBar
-import com.example.carcopilot.ui.components.EngineDiagram
 import com.example.carcopilot.ui.components.SpecsChipRow
+import com.example.carcopilot.ui.components.schematic.SchematicRenderer
+import com.example.carcopilot.ui.components.schematic.SchematicSpec
 import com.example.carcopilot.ui.components.StepPill
 import com.example.carcopilot.ui.components.StepProgress
 import com.example.carcopilot.ui.components.Tab
@@ -123,9 +123,13 @@ fun WalkthroughScreen(
             brief = it.diagramHint ?: it.title,
         ) }
     }
-    val defaultHighlights: List<DiagramTarget> = remember(issue.id) {
+    val defaultHighlights: List<String> = remember(issue.id) {
         val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
         DTCTable.DEFAULT.lookup(code)?.defaultHighlights.orEmpty()
+    }
+    val schematic: SchematicSpec? = remember(issue.id) {
+        val code = issue.dtcs.firstOrNull()?.code ?: return@remember null
+        DTCTable.DEFAULT.lookup(code)?.schematic
     }
     val procedureSpecs: List<WalkthroughSpec> = remember(issue.id) {
         val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
@@ -230,6 +234,7 @@ fun WalkthroughScreen(
                     WalkthroughContent(
                         rendered = ready,
                         stepIndex = stepIndex,
+                        schematic = schematic,
                         defaultHighlights = defaultHighlights,
                         procedureSpecs = procedureSpecs,
                         severity = issue.severity,
@@ -256,7 +261,8 @@ fun WalkthroughScreen(
 private fun WalkthroughContent(
     rendered: WalkthroughPipelineState.Ready,
     stepIndex: Int,
-    defaultHighlights: List<DiagramTarget>,
+    schematic: SchematicSpec?,
+    defaultHighlights: List<String>,
     procedureSpecs: List<WalkthroughSpec>,
     severity: Severity,
     onAdvance: () -> Unit,
@@ -266,7 +272,7 @@ private fun WalkthroughContent(
     val steps = rendered.steps
     val total = steps.size
     val activeRendered = steps.getOrNull(stepIndex) ?: return
-    val activeHighlights = highlightsForPlanStep(activeRendered.planStep, defaultHighlights)
+    val activeHighlights = highlightsForPlanStep(activeRendered.planStep, defaultHighlights).toSet()
     val isFirst = stepIndex == 0
     val isLast = stepIndex == total - 1
     val nextLabel = if (isLast) "Finish →" else "Done — next step →"
@@ -293,11 +299,14 @@ private fun WalkthroughContent(
             Spacer(Modifier.height(14.dp))
             SpecsChipRow(specs = procedureSpecs)
         }
-        Spacer(Modifier.height(14.dp))
-        DiagramCard(
-            caption = activeRendered.planStep.brief,
-            highlights = activeHighlights,
-        )
+        if (schematic != null) {
+            Spacer(Modifier.height(14.dp))
+            DiagramCard(
+                caption = activeRendered.planStep.brief,
+                schematic = schematic,
+                highlights = activeHighlights,
+            )
+        }
         Spacer(Modifier.height(18.dp))
         StepControls(
             backEnabled = !isFirst,
@@ -320,7 +329,11 @@ private fun buildReadyFromFallback(
 }
 
 @Composable
-private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
+private fun DiagramCard(
+    caption: String,
+    schematic: SchematicSpec,
+    highlights: Set<String>,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -336,7 +349,7 @@ private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
                 .background(CarCopilotColors.SchematicSurface)
                 .padding(18.dp),
         ) {
-            EngineDiagram(highlights = highlights)
+            SchematicRenderer(spec = schematic, highlightedIds = highlights)
         }
         Spacer(Modifier.height(12.dp))
         Text(
