@@ -17,6 +17,8 @@ Those barriers stack hardest where it matters most. A driver in a tunnel, a park
 
 CAR·COPILOT is that friend on the phone — but it lives on the phone. **No cloud calls. No location services. No internet permission for AI. No subscription.** Plug in any $20 OBD-II reader, and a Pixel 9 in airplane mode tells you what's wrong, in plain English, and walks you through fixing it. The whole product is one APK and one ~3.4 GB model file. After that, it works anywhere, for anyone, forever.
 
+We built it this way because every existing answer to a check-engine light is a SaaS app, and a SaaS app is the wrong shape of answer for a car. The right shape is something a friend would say to you in a parking lot — concrete, conditional, and free. Gemma 4 on LiteRT is the first time on-device generation can credibly be that.
+
 ## What it does
 
 Five Compose screens, every narrative surface streamed by Gemma 4 running locally.
@@ -33,7 +35,7 @@ The load-bearing engineering choice is what Gemma is **not** allowed to do.
 
 `OBDSnapshot → RulesEngine → Classification + RagStore → PromptBuilder → GemmaService (5 surfaces) → JSON-aware extractors → UI (fail-soft fallback)`
 
-Severity, route (DIY vs expert), confidence, likely cause, supporting signals, cost, and time — every safety-relevant field — is computed by `data/RulesEngine.kt` from named live readings against DTC-specific thresholds. A P0301 misfire with O₂ above 0.85 V earns *HIGH* and "leaking injector"; below 0.2 V with low RPM earns *HIGH* and "failed coil". A P0087 fuel-rail fault under 20,000 kPa earns *HIGH* and "clogged filter — cheap and the correct first hypothesis before checking the pump". `data/DTCTable.kt` carries 256 thin entries plus 16 curated procedures; `data/RagStore.kt` injects per-DTC and developing-market context.
+Severity, route, confidence, likely cause, supporting signals, cost, and time — every safety-relevant field — is computed by `data/RulesEngine.kt` from named live readings against DTC-specific thresholds. A P0301 misfire with O₂ above 0.85 V earns *HIGH* and "leaking injector"; below 0.2 V with low RPM earns *HIGH* and "failed coil". `data/DTCTable.kt` carries 256 thin entries plus 16 curated procedures; `data/RagStore.kt` injects per-DTC and developing-market context.
 
 Only then does Gemma narrate. Five surfaces, each with its own prompt template, per-surface sampler, JSON envelope, and a stateful extractor that pulls partial content from the streaming buffer without ever letting a half-finished escape sequence reach the user. Every surface has a canned-text fallback path — if LiteRT-LM throws, the user still sees text. The Issue data shape (`model/Schema.kt`) is the UI contract.
 
