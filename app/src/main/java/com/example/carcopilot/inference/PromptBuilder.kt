@@ -1,6 +1,8 @@
 package com.example.carcopilot.inference
 
 import android.content.Context
+import com.example.carcopilot.data.RagStore
+import com.example.carcopilot.model.Classification
 import com.example.carcopilot.model.DTC
 import com.example.carcopilot.model.HistoryEntry
 import com.example.carcopilot.model.HistoryPill
@@ -16,6 +18,7 @@ import com.example.carcopilot.ui.PlanStep
  */
 class PromptBuilder(context: Context) {
     val systemPrompt: String = context.assets.open("system.md").bufferedReader().use { it.readText() }
+    private val ragStore = RagStore(context)
     private val synthesisTemplate: String =
         context.assets.open("issue_synthesis.md").bufferedReader().use { it.readText() }
     private val mechanicDraftTemplate: String =
@@ -45,8 +48,16 @@ class PromptBuilder(context: Context) {
         "P0301" to context.assets.open("walkthroughs/P0301.md").bufferedReader().use { it.readText() },
     )
 
-    fun renderSynthesisPrompt(issue: Issue, language: String = "en"): String =
-        synthesisTemplate
+    fun renderSynthesisPrompt(
+        issue: Issue,
+        classification: Classification? = null,
+        language: String = "en",
+    ): String {
+        val ragContext = issue.dtcs.firstOrNull()?.code
+            ?.let { ragStore.retrieve(it) }
+            ?.takeIf { it.isNotBlank() }
+            ?: "(none)"
+        return synthesisTemplate
             .replace("{vehicle}", issue.vehicle.displayName)
             .replace("{mileage}", issue.vehicle.mileage?.toString() ?: "unknown")
             .replace("{severity}", issue.severity.name)
@@ -59,7 +70,10 @@ class PromptBuilder(context: Context) {
             .replace("{drivability}", issue.meta.drivability ?: "—")
             .replace("{dtcs}", formatDtcs(issue.dtcs))
             .replace("{live_readings}", formatReadings(issue.liveReadings))
+            .replace("{supporting_signals}", formatSupportingSignals(classification))
+            .replace("{rag_context}", ragContext)
             .replace("{language}", language)
+    }
 
     fun renderMechanicDraftPrompt(issue: Issue, language: String = "en"): String =
         mechanicDraftTemplate
@@ -122,6 +136,15 @@ class PromptBuilder(context: Context) {
             ?: error("Issue ${issue.id} has no DTCs; cannot resolve a walkthrough procedure.")
         return procedures[code]
             ?: error("No curated procedure for DTC $code. Add assets/walkthroughs/$code.md and wire it into PromptBuilder.procedures.")
+    }
+
+    private fun formatSupportingSignals(classification: Classification?): String {
+        if (classification == null || classification.supportingSignals.isEmpty()) return "(none)"
+        val lines = mutableListOf<String>()
+        lines += "Confidence: ${classification.confidence.name.lowercase()}"
+        lines += "Likely cause: ${classification.likelyCause}"
+        classification.supportingSignals.forEach { lines += "- $it" }
+        return lines.joinToString("\n")
     }
 
     private fun formatDtcs(dtcs: List<DTC>): String =

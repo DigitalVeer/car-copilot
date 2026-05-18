@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.inference.GemmaService
+import com.example.carcopilot.model.Classification
 import com.example.carcopilot.model.FALLBACK_GOOD_NEWS_MISFIRE
 import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
 import com.example.carcopilot.model.Issue
@@ -40,6 +41,7 @@ import com.example.carcopilot.ui.theme.CarCopilotColors
 fun IssueScreen(
     issue: Issue,
     gemma: GemmaService,
+    classification: Classification? = null,
     onBack: () -> Unit,
     onWalkthrough: () -> Unit = {},
     onMechanicDraft: () -> Unit = {},
@@ -61,7 +63,7 @@ fun IssueScreen(
         }
         val buf = StringBuilder()
         try {
-            gemma.streamSynthesis(issue).collect { delta ->
+            gemma.streamSynthesis(issue, classification).collect { delta ->
                 buf.append(delta)
                 val progress = extractSynthesisInProgress(buf.toString())
                 if (progress.partial.isNotEmpty()) {

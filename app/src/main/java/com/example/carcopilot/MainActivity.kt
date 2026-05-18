@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
                     val app = ctx.applicationContext as CarCopilotApp
                     val gemma = app.gemma
                     val misfire = remember { app.initialIssue }
+                    val classification = remember { app.initialClassification }
 
                     if (misfire == null) {
                         // No diagnosable Issue at startup — either BLUETOOTH mode
@@ -73,6 +74,7 @@ class MainActivity : ComponentActivity() {
                                 IssueScreen(
                                     issue = misfire,
                                     gemma = gemma,
+                                    classification = classification,
                                     onBack = { nav.popBackStack() },
                                     onWalkthrough = { nav.navigate("walkthrough") },
                                     onMechanicDraft = { nav.navigate("draft") },

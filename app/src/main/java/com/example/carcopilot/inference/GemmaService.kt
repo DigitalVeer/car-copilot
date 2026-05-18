@@ -3,6 +3,7 @@ package com.example.carcopilot.inference
 import android.content.Context
 import android.util.Log
 import com.example.carcopilot.BuildConfig
+import com.example.carcopilot.model.Classification
 import com.example.carcopilot.model.HistoryEntry
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.ui.PlanStep
@@ -183,7 +184,7 @@ class GemmaService(
      * closed and nulled so the next call rebuilds it (preserving the Phase 5
      * resilience contract).
      */
-    fun streamSynthesis(issue: Issue): Flow<String> = flow {
+    fun streamSynthesis(issue: Issue, classification: Classification? = null): Flow<String> = flow {
         if (engine == null) {
             Log.w(TAG, "streamSynthesis: engine not initialized; emitting empty")
             return@flow
@@ -200,7 +201,7 @@ class GemmaService(
             val rawBuf = StringBuilder()
             var failed = false
             try {
-                convo.sendMessageAsync(promptBuilder.renderSynthesisPrompt(issue))
+                convo.sendMessageAsync(promptBuilder.renderSynthesisPrompt(issue, classification))
                     .collect { message ->
                         if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
                         tokenCount += 1

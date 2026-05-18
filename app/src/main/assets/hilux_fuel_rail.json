@@ -1,0 +1,21 @@
+{
+  "captured_at": "2026-05-17T08:23:00Z",
+  "vehicle": {
+    "year": 2012,
+    "make": "Toyota",
+    "model": "Hilux",
+    "mileage": 312000,
+    "display_name": "2012 Hilux"
+  },
+  "engine_family": "DIESEL",
+  "raw_dtcs": ["P0087"],
+  "pending_dtcs": ["P0087"],
+  "live_data": {
+    "rpm": 750,
+    "coolant_temp_c": 85,
+    "engine_load_pct": 25,
+    "fuel_rail_kpa": 28000,
+    "battery_v": 12.5,
+    "vehicle_speed_kph": 0
+  }
+}
