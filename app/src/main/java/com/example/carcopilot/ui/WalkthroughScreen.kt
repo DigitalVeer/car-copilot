@@ -4,7 +4,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +46,7 @@ import com.example.carcopilot.ui.components.Tab
 import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
 import com.example.carcopilot.ui.components.WalkthroughLoadingPage
+import com.example.carcopilot.ui.components.scalePressable
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
 
@@ -424,9 +424,9 @@ private fun BackButton(
         if (enabled) CarCopilotColors.MetaBold else CarCopilotColors.TextFaint
     Box(
         modifier = modifier
+            .scalePressable(enabled = enabled, onClick = onClick)
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, borderColor, RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -447,9 +447,9 @@ private fun NextButton(
 ) {
     Box(
         modifier = modifier
+            .scalePressable(onClick = onClick)
             .clip(RoundedCornerShape(10.dp))
             .background(CarCopilotColors.Accent)
-            .clickable(onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {

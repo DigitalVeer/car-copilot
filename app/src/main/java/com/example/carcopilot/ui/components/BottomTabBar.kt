@@ -2,7 +2,6 @@ package com.example.carcopilot.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -79,7 +78,7 @@ private fun TabButton(
     val labelTint = if (active) CarCopilotColors.AccentInline else CarCopilotColors.TextFaint
     Column(
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .scalePressable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

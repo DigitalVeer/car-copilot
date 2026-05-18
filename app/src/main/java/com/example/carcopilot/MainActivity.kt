@@ -11,7 +11,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -36,6 +41,9 @@ import com.example.carcopilot.ui.SplashScreen
 import com.example.carcopilot.ui.WalkthroughScreen
 import com.example.carcopilot.ui.theme.CarCopilotTheme
 import kotlinx.coroutines.delay
+
+private val EaseOutQuart = CubicBezierEasing(0.25f, 1f, 0.5f, 1f)
+private val EaseInQuart = CubicBezierEasing(0.5f, 0f, 0.75f, 0f)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,10 +115,35 @@ private fun MainContent(app: CarCopilotApp) {
             val toHome: () -> Unit = {
                 nav.popBackStack(route = "home", inclusive = false)
             }
+            // iOS-style horizontal slide with a fade companion. Forward push:
+            // new screen slides in from the right while the outgoing screen
+            // dims. Pop: current slides out to the right while the previous
+            // dims back in. EaseOutQuart on entry / EaseInQuart on exit so
+            // motion decelerates into place and accelerates away from it,
+            // matching the rest of the app's exponential easing language.
+            val slideDistance: (Int) -> Int = { full -> full / 6 }
             NavHost(
                 navController = nav,
                 startDestination = "home",
                 modifier = Modifier.padding(innerPadding),
+                enterTransition = {
+                    slideInHorizontally(
+                        animationSpec = tween(durationMillis = 280, easing = EaseOutQuart),
+                        initialOffsetX = slideDistance,
+                    ) + fadeIn(animationSpec = tween(durationMillis = 220))
+                },
+                exitTransition = {
+                    fadeOut(animationSpec = tween(durationMillis = 160))
+                },
+                popEnterTransition = {
+                    fadeIn(animationSpec = tween(durationMillis = 220))
+                },
+                popExitTransition = {
+                    slideOutHorizontally(
+                        animationSpec = tween(durationMillis = 280, easing = EaseInQuart),
+                        targetOffsetX = slideDistance,
+                    ) + fadeOut(animationSpec = tween(durationMillis = 220))
+                },
             ) {
                 composable("home") {
                     HomeScreen(
@@ -163,10 +196,13 @@ private fun MainContent(app: CarCopilotApp) {
 }
 
 /**
- * Wraps [SnapshotViewerScreen] with the runtime BLUETOOTH_CONNECT permission
- * gate required by API 31+ before any [android.bluetooth.BluetoothAdapter]
- * access. For FIXTURE and EMULATOR builds the permission is irrelevant — we
- * report it as granted so the scan runs immediately.
+ * Wraps [SnapshotViewerScreen] with the runtime Bluetooth permission gate
+ * required by API 31+ before any [android.bluetooth.BluetoothAdapter] access.
+ * Both BLUETOOTH_CONNECT (RFCOMM socket) and BLUETOOTH_SCAN (adapter state
+ * queries like isDiscovering) are needed — the OS throws SecurityException
+ * on isDiscovering without SCAN even when SCAN's neverForLocation flag is set.
+ * For FIXTURE and EMULATOR builds the permissions are irrelevant — we report
+ * granted so the scan runs immediately.
  */
 @androidx.compose.runtime.Composable
 private fun BluetoothGatedSnapshotViewer(
@@ -177,24 +213,27 @@ private fun BluetoothGatedSnapshotViewer(
     val needsBtPermission = BuildConfig.DATA_SOURCE == "BLUETOOTH" &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
+    val requiredPerms = arrayOf(
+        Manifest.permission.BLUETOOTH_CONNECT,
+        Manifest.permission.BLUETOOTH_SCAN,
+    )
     var granted by remember {
         mutableStateOf(
-            !needsBtPermission ||
-                ContextCompat.checkSelfPermission(
-                    ctx, Manifest.permission.BLUETOOTH_CONNECT
-                ) == PackageManager.PERMISSION_GRANTED
+            !needsBtPermission || requiredPerms.all { p ->
+                ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
+            }
         )
     }
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { result -> granted = result }
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result -> granted = result.values.all { it } }
 
     SnapshotViewerScreen(
         obd = app.obd,
         btPermissionGranted = granted,
         onRequestPermission = {
             if (needsBtPermission) {
-                launcher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                launcher.launch(requiredPerms)
             }
         },
         modifier = modifier,

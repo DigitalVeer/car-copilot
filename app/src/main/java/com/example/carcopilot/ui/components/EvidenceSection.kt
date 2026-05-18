@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +45,7 @@ fun EvidenceToggle(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .scalePressable(onClick = onClick)
             .drawBehind {
                 drawLine(
                     color = CarCopilotColors.Line,
@@ -54,7 +54,6 @@ fun EvidenceToggle(
                     strokeWidth = 1.dp.toPx(),
                 )
             }
-            .clickable(onClick = onClick)
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,

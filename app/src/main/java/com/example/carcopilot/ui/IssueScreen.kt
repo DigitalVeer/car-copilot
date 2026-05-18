@@ -1,11 +1,14 @@
 package com.example.carcopilot.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Classification
@@ -35,6 +39,45 @@ import com.example.carcopilot.ui.components.Tab
 import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
 import com.example.carcopilot.ui.theme.CarCopilotColors
+
+/**
+ * Slide-up + fade entry for a single content block. The MutableTransitionState
+ * starts false and flips to true on first composition, so the animation
+ * triggers the moment the screen appears. 280ms duration with
+ * LinearOutSlowInEasing — calm exponential deceleration matching the rest
+ * of the app's motion language. Layout space is reserved immediately
+ * (no expandVertically); only opacity and translation animate, so the
+ * page doesn't reflow as the stagger plays.
+ */
+@Composable
+private fun StaggeredEntry(
+    delayMs: Int,
+    content: @Composable () -> Unit,
+) {
+    val visibleState = remember {
+        MutableTransitionState(false).apply { targetState = true }
+    }
+    val slideOffsetPx = with(LocalDensity.current) { 12.dp.roundToPx() }
+    AnimatedVisibility(
+        visibleState = visibleState,
+        enter = fadeIn(
+            animationSpec = tween(
+                durationMillis = 280,
+                delayMillis = delayMs,
+                easing = LinearOutSlowInEasing,
+            ),
+        ) + slideInVertically(
+            animationSpec = tween(
+                durationMillis = 280,
+                delayMillis = delayMs,
+                easing = LinearOutSlowInEasing,
+            ),
+            initialOffsetY = { slideOffsetPx },
+        ),
+    ) {
+        content()
+    }
+}
 
 @Composable
 fun IssueScreen(
@@ -100,41 +143,57 @@ fun IssueScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = 20.dp),
         ) {
+            // Stagger the three content blocks in on screen mount. The
+            // NavHost slide-in plays concurrently (it moves the whole
+            // screen container); the staggers move the elements inside.
+            // 60ms between elements is short enough that the cascade
+            // finishes near the end of the NavHost transition, so the
+            // user lands on a fully-settled screen ~400ms after the tap.
             // Drivability rides inside the AI strip as its verdict footer
             // so the severity rail wraps both the AI body and the verdict
-            // — one chip, not a tile floating beneath. The previous
-            // standalone DrivabilityStrip lived just under this Row.
-            AnimatedAIStrip(
-                state = state,
-                label = "Here's what I'm seeing",
-                severity = issue.severity,
-                verdict = issue.meta.drivability?.let { drivability ->
-                    {
-                        AiStripVerdict(
-                            label = "DRIVABILITY",
-                            headline = drivability,
-                            severity = issue.severity,
-                        )
-                    }
-                },
-            )
-            IssueCardWithCTAs(
-                issue = issue,
-                primaryLabel = "Walk me through the fix →",
-                ghostLabel = "Send this to a mechanic instead",
-                onPrimary = onWalkthrough,
-                onGhost = onMechanicDraft,
-            )
+            // — one chip, not a tile floating beneath.
+            StaggeredEntry(delayMs = 0) {
+                AnimatedAIStrip(
+                    state = state,
+                    label = "Here's what I'm seeing",
+                    severity = issue.severity,
+                    verdict = issue.meta.drivability?.let { drivability ->
+                        {
+                            AiStripVerdict(
+                                label = "DRIVABILITY",
+                                headline = drivability,
+                                severity = issue.severity,
+                            )
+                        }
+                    },
+                )
+            }
+            StaggeredEntry(delayMs = 60) {
+                IssueCardWithCTAs(
+                    issue = issue,
+                    primaryLabel = "Walk me through the fix →",
+                    ghostLabel = "Send this to a mechanic instead",
+                    onPrimary = onWalkthrough,
+                    onGhost = onMechanicDraft,
+                )
+            }
             Spacer(Modifier.height(24.dp))
-            EvidenceToggle(open = evidenceOpen, onClick = { evidenceOpen = !evidenceOpen })
-            AnimatedVisibility(
-                visible = evidenceOpen,
-                enter = expandVertically(animationSpec = tween(300)) +
-                    fadeIn(animationSpec = tween(300)),
-                exit = shrinkVertically(animationSpec = tween(300)) +
-                    fadeOut(animationSpec = tween(300)),
-            ) {
-                EvidenceSection(dtcs = issue.dtcs, readings = issue.liveReadings)
+            StaggeredEntry(delayMs = 120) {
+                Column {
+                    EvidenceToggle(
+                        open = evidenceOpen,
+                        onClick = { evidenceOpen = !evidenceOpen },
+                    )
+                    AnimatedVisibility(
+                        visible = evidenceOpen,
+                        enter = expandVertically(animationSpec = tween(300)) +
+                            fadeIn(animationSpec = tween(300)),
+                        exit = shrinkVertically(animationSpec = tween(300)) +
+                            fadeOut(animationSpec = tween(300)),
+                    ) {
+                        EvidenceSection(dtcs = issue.dtcs, readings = issue.liveReadings)
+                    }
+                }
             }
         }
         BottomTabBar(

@@ -2,8 +2,10 @@ package com.example.carcopilot.ui.components.schematic
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -47,6 +49,13 @@ import com.example.carcopilot.ui.theme.CarCopilotColors
  *      paint at the bottom of the viewport.
  *   6. Per-region labels and arrows — drawn last so they sit above geometry.
  *
+ * Each region in [SchematicSpec.regions] carries its own animated alpha
+ * keyed on whether its id is currently in [highlightedIds]. When the step
+ * advances and the highlight moves (e.g. COIL_1 → PLUG_1), COIL_1 fades to
+ * zero over 240ms while PLUG_1 fades up — the swap reads as attention
+ * shifting between components, not as a hard pop. The animated alpha is
+ * multiplied by the breathing [pulse] so both motions compound cleanly.
+ *
  * The native-canvas text path needs a Typeface; we resolve JetBrains Mono once
  * via `remember(context)` and reuse the same instance across the two paints.
  */
@@ -76,6 +85,19 @@ fun SchematicRenderer(
             label = "highlight-alpha",
         )
 
+    // Per-region target alpha — 1f when active in highlightedIds, 0f when
+    // not. animateFloatAsState handles the cross-fade between step changes.
+    val regionAlphas: Map<String, Float> = spec.regions.keys.associateWith { id ->
+        animateFloatAsState(
+            targetValue = if (id in highlightedIds) 1f else 0f,
+            animationSpec = tween(
+                durationMillis = 240,
+                easing = LinearOutSlowInEasing,
+            ),
+            label = "highlight-$id",
+        ).value
+    }
+
     Canvas(
         modifier = modifier
             .fillMaxWidth()
@@ -89,9 +111,14 @@ fun SchematicRenderer(
 
         spec.shapes.forEach { shape -> drawShape(shape, sx, sy) }
 
-        val activeRegions = highlightedIds.mapNotNull { id -> spec.regions[id] }
-        activeRegions.forEach { region ->
-            drawHighlight(region, accent.copy(alpha = pulse), sx, sy)
+        // Regions with non-trivial alpha are drawn; everything below epsilon is
+        // a no-op so a fully-faded region pays nothing.
+        val visibleRegions = spec.regions.entries.mapNotNull { (id, region) ->
+            val alpha = regionAlphas[id] ?: 0f
+            if (alpha > 0.01f) Triple(id, region, alpha) else null
+        }
+        visibleRegions.forEach { (_, region, regionAlpha) ->
+            drawHighlight(region, accent.copy(alpha = pulse * regionAlpha), sx, sy)
         }
 
         drawIntoCanvas { canvas ->
@@ -120,7 +147,13 @@ fun SchematicRenderer(
                     edgePaint,
                 )
             }
-            activeRegions.forEach { region ->
+            // Per-region label alpha tracks the same fade as the highlight
+            // overlay — text and shape rise and fall together. Paint.alpha is
+            // a final multiplier over both the text fill and its shadow, so
+            // setting it here is enough; no need to rebuild the paint.
+            visibleRegions.forEach { (_, region, regionAlpha) ->
+                labelPaint.alpha =
+                    ((pulse * regionAlpha) * 255f).toInt().coerceIn(0, 255)
                 canvas.nativeCanvas.drawText(
                     region.label,
                     region.labelAnchor.x * sx,
