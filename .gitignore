@@ -46,3 +46,26 @@ carcopilot-demo/
 
 # On-device smoke-test logcat captures — per-run artifacts, not source
 smoke-*.log
+*-dump.log
+
+# Misc runtime log captures saved while debugging the app
+full_logcat.txt
+car_logs.txt
+crash_buffer.txt
+*.logcat
+
+# Build artifacts that should never land in git
+/app/build/
+/app/release/
+*.apk
+*.aab
+
+# OS / editor cruft
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# Demo video footage captured for the hackathon submission
+submission/footage/
