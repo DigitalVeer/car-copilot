@@ -36,3 +36,39 @@ fun fallbackSynthesisFor(code: String?): String =
 
 fun fallbackGoodNewsFor(code: String?): String =
     FALLBACK_GOOD_NEWS[code] ?: FALLBACK_GOOD_NEWS_MISFIRE
+
+/**
+ * Builds a data-driven synthesis from [Classification] when Gemma is
+ * unavailable. Uses the actual sensor readings captured in
+ * [Classification.supportingSignals] so the text is specific to this
+ * vehicle's snapshot rather than a generic canned string.
+ *
+ * Falls back to [fallbackSynthesisFor] when confidence is LOW or there
+ * are no supporting signals to reference.
+ */
+fun synthesizeFromClassification(
+    classification: Classification?,
+    issue: Issue,
+): Pair<String, String?> {
+    val code = issue.dtcs.firstOrNull()?.code
+    val goodNews = fallbackGoodNewsFor(code)
+
+    if (classification == null ||
+        classification.confidence == Confidence.LOW ||
+        classification.supportingSignals.isEmpty()
+    ) {
+        return fallbackSynthesisFor(code) to goodNews
+    }
+
+    val synthesis = buildString {
+        classification.supportingSignals.take(2).forEach { signal ->
+            append(signal)
+            append(". ")
+        }
+        append("That points to ")
+        append(classification.likelyCause)
+        append(".")
+    }
+
+    return synthesis to goodNews
+}

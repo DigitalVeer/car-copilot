@@ -26,8 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Classification
 import com.example.carcopilot.model.Issue
-import com.example.carcopilot.model.fallbackGoodNewsFor
-import com.example.carcopilot.model.fallbackSynthesisFor
+import com.example.carcopilot.model.synthesizeFromClassification
 import com.example.carcopilot.ui.components.BottomTabBar
 import com.example.carcopilot.ui.components.EvidenceSection
 import com.example.carcopilot.ui.components.EvidenceToggle
@@ -49,15 +48,15 @@ fun IssueScreen(
 ) {
     var state by remember { mutableStateOf<SynthesisState>(SynthesisState.Thinking) }
     var evidenceOpen by remember { mutableStateOf(false) }
-    val primaryCode = issue.dtcs.firstOrNull()?.code
 
     LaunchedEffect(issue.id) {
         // Wait for engine init to settle (may already be done if user lingered on Home).
         gemma.awaitReady()
+        val (fallbackSynthesis, fallbackGoodNews) = synthesizeFromClassification(classification, issue)
         if (gemma.initError != null) {
             state = SynthesisState.Ready(
-                synthesis = fallbackSynthesisFor(primaryCode),
-                goodNews = fallbackGoodNewsFor(primaryCode),
+                synthesis = fallbackSynthesis,
+                goodNews = fallbackGoodNews,
                 isFallback = true,
             )
             return@LaunchedEffect
@@ -74,14 +73,14 @@ fun IssueScreen(
                 // envelope (`{"synthesis": "`) and there's nothing to show yet.
             }
             state = if (buf.isEmpty()) {
-                SynthesisState.Ready(fallbackSynthesisFor(primaryCode), fallbackGoodNewsFor(primaryCode), isFallback = true)
+                SynthesisState.Ready(fallbackSynthesis, fallbackGoodNews, isFallback = true)
             } else {
                 parseOrFallback(buf.toString())
             }
         } catch (_: Throwable) {
             state = SynthesisState.Ready(
-                synthesis = fallbackSynthesisFor(primaryCode),
-                goodNews = fallbackGoodNewsFor(primaryCode),
+                synthesis = fallbackSynthesis,
+                goodNews = fallbackGoodNews,
                 isFallback = true,
             )
         }
