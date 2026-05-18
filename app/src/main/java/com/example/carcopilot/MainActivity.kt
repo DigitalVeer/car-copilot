@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,11 +80,12 @@ class MainActivity : ComponentActivity() {
 @androidx.compose.runtime.Composable
 private fun MainContent(app: CarCopilotApp) {
     val gemma = app.gemma
-    val misfire = remember { app.initialIssue }
-    val classification = remember { app.initialClassification }
+    val misfire by app.issueState.collectAsState()
+    val classification by app.classificationState.collectAsState()
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        if (misfire == null) {
-            // No diagnosable Issue at startup — either BLUETOOTH mode
+        val issue = misfire
+        if (issue == null) {
+            // No diagnosable Issue yet — either BLUETOOTH mode
             // (dongle scan is async), a healthy car with no DTCs, or
             // the snapshot read failed. Render the raw snapshot view
             // as the "All clear / connect" fallback so the user sees
@@ -104,14 +106,14 @@ private fun MainContent(app: CarCopilotApp) {
             ) {
                 composable("home") {
                     HomeScreen(
-                        misfire = misfire,
+                        misfire = issue,
                         onIssueClick = { nav.navigate("issue") },
                         onHistoryTab = toHistory,
                     )
                 }
                 composable("issue") {
                     IssueScreen(
-                        issue = misfire,
+                        issue = issue,
                         gemma = gemma,
                         classification = classification,
                         onBack = { nav.popBackStack() },
@@ -122,7 +124,7 @@ private fun MainContent(app: CarCopilotApp) {
                 }
                 composable("walkthrough") {
                     WalkthroughScreen(
-                        issue = misfire,
+                        issue = issue,
                         gemma = gemma,
                         onBack = { nav.popBackStack() },
                         onFinish = toHome,
@@ -132,7 +134,7 @@ private fun MainContent(app: CarCopilotApp) {
                 }
                 composable("draft") {
                     MechanicDraftScreen(
-                        issue = misfire,
+                        issue = issue,
                         gemma = gemma,
                         onBack = { nav.popBackStack() },
                         onHomeTab = toHome,
@@ -142,7 +144,7 @@ private fun MainContent(app: CarCopilotApp) {
                 composable("history") {
                     HistoryScreen(
                         gemma = gemma,
-                        currentIssue = misfire,
+                        currentIssue = issue,
                         onHomeTab = toHome,
                         onBack = { nav.popBackStack() },
                     )

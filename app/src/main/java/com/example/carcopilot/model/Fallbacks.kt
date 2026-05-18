@@ -12,6 +12,7 @@ package com.example.carcopilot.model
 const val FALLBACK_SYNTHESIS_MISFIRE: String =
     "Cylinder 1 keeps [Y]misfiring[/Y]. On older Corollas, this is almost always a worn [Y]ignition coil[/Y]."
 
+const val FALLBACK_GOOD_NEWS_MISFIRE: String =
     "It's a 30-minute fix — I can [Y]walk you through it[/Y]."
 
 private val FALLBACK_SYNTHESIS: Map<String, String> = mapOf(
