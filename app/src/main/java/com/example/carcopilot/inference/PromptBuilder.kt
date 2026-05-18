@@ -49,6 +49,22 @@ class PromptBuilder(context: Context) {
         "P0087" to context.assets.open("walkthroughs/P0087.md").bufferedReader().use { it.readText() },
     )
 
+    /**
+     * Pre-split procedures keyed by DTC code, structured as
+     * `[intro, phase1, phase2, ...]`. The plan call still gets the full
+     * document (it clusters phases into steps and needs the whole text); the
+     * per-step call gets `intro + phaseForStep(...)` only.
+     *
+     * Splitting happens once at app start so step generation doesn't pay
+     * per-call regex parsing. BenchmarkInfo on the synthesis surface measured
+     * prefill at ~142 tokens/sec — at that rate, dropping the per-step
+     * procedure from ~1,450 tokens (P0301) or ~2,180 tokens (P0087) down to
+     * intro + one phase chunk (~400-700 tokens) buys back ~10-15 seconds of
+     * wall-clock before the first body bullet appears.
+     */
+    private val procedurePhases: Map<String, List<String>> =
+        procedures.mapValues { (_, body) -> splitProcedureIntoPhases(body) }
+
     fun renderSynthesisPrompt(
         issue: Issue,
         classification: Classification? = null,
@@ -125,7 +141,23 @@ class PromptBuilder(context: Context) {
             .replace("{total_steps}", totalSteps.toString())
             .replace("{step_title}", planStep.title)
             .replace("{step_brief}", planStep.brief)
-            .replace("{procedure}", procedureFor(issue))
+            .replace("{procedure}", procedureChunkForStep(issue, planStep.number, totalSteps))
+
+    /**
+     * Resolve the per-step procedure chunk for [issue]'s primary DTC. Falls
+     * back to the full document when the splitter couldn't find any
+     * `## Phase N` headers (legacy procedure shape). The chunk always opens
+     * with the intro section — title, vehicle context, parts list, named
+     * tools — so the step body still sees the bill of materials and named
+     * components even when the relevant phase doesn't restate them.
+     */
+    private fun procedureChunkForStep(issue: Issue, stepNumber: Int, totalSteps: Int): String {
+        val code = issue.dtcs.firstOrNull()?.code
+            ?: error("Issue ${issue.id} has no DTCs; cannot resolve a walkthrough procedure.")
+        val phases = procedurePhases[code]
+            ?: error("No curated procedure for DTC $code. Add assets/walkthroughs/$code.md and wire it into PromptBuilder.procedures.")
+        return phaseForStep(phases, stepNumber, totalSteps)
+    }
 
     /**
      * Resolve the curated procedure text for [issue]'s primary DTC. Throws
@@ -175,5 +207,71 @@ class PromptBuilder(context: Context) {
         HistoryPill.Open -> "in progress"
         HistoryPill.Resolved -> "resolved"
         HistoryPill.Recurrence -> "recurrence"
+    }
+}
+
+/**
+ * Split a curated procedure document into `[intro, phase1, phase2, ...]`
+ * for per-step prefill. A phase boundary is any line matching `## Phase N`
+ * (case-sensitive, N is one or more digits) — the shape every curated
+ * procedure under `assets/walkthroughs/` follows today. Everything before
+ * the first phase header (markdown title, vehicle-context section, parts
+ * and tools list) becomes the intro chunk at index 0; every subsequent
+ * chunk keeps its own `## Phase N — title` heading so the model still
+ * sees which phase it's reading.
+ *
+ * Returns a single-element list when no phase headers are found. Callers
+ * detect this and either fall back to the original full-document
+ * substitution or accept that the intro carries everything.
+ */
+internal fun splitProcedureIntoPhases(body: String): List<String> {
+    val pattern = Regex("""(?m)^## Phase \d+""")
+    val matches = pattern.findAll(body).toList()
+    if (matches.isEmpty()) return listOf(body.trim())
+    val chunks = mutableListOf<String>()
+    chunks += body.substring(0, matches.first().range.first).trimEnd()
+    for (i in matches.indices) {
+        val start = matches[i].range.first
+        val end = if (i + 1 < matches.size) matches[i + 1].range.first else body.length
+        chunks += body.substring(start, end).trimEnd()
+    }
+    return chunks
+}
+
+/**
+ * Pick the per-step procedure chunk from the splitter output. Step 1 maps
+ * to the first phase, the last step maps to the last phase, middle steps
+ * map by index (clamped). The intro is always included so the step body
+ * still sees the vehicle context, parts list, named tools, and any
+ * cross-phase context that lives before `## Phase 1`.
+ *
+ * The plan call is intentionally NOT routed through this function — it
+ * clusters the curated phases into the plan's step list and needs to see
+ * every phase header to do that. Only the per-step body call benefits
+ * from the reduced grounding.
+ *
+ * Step↔phase alignment is positional, not semantic — the plan prompt
+ * explicitly tells Gemma "one logical phase per step" with prep first and
+ * verification last, so for the curated P0301 (6 phases) and P0087 (5
+ * phases) the indexed mapping is the right one. When step count and
+ * phase count diverge, the bias is toward the indexed phase the user is
+ * most likely on (step 3 of 4 → middle-late phase), with prep + verify
+ * pinned to the ends.
+ */
+internal fun phaseForStep(phases: List<String>, stepNumber: Int, totalSteps: Int): String {
+    if (phases.size < 2) return phases.firstOrNull().orEmpty()
+    val intro = phases.first()
+    val phaseChunks = phases.drop(1)
+    val targetIdx = when {
+        stepNumber <= 1 -> 0
+        stepNumber >= totalSteps -> phaseChunks.lastIndex
+        else -> (stepNumber - 1).coerceIn(0, phaseChunks.lastIndex)
+    }
+    return buildString {
+        if (intro.isNotBlank()) {
+            append(intro)
+            append("\n\n")
+        }
+        append(phaseChunks[targetIdx])
     }
 }

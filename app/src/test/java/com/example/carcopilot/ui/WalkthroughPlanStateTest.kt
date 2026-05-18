@@ -198,4 +198,80 @@ class WalkthroughPlanStateTest {
         assertEquals(fallback, state.steps)
         assertTrue(state.isFallback)
     }
+
+    // ── tail balancing (real Gemma truncation shapes) ────────────────────────
+
+    @Test
+    fun `recovers when model omits the outer closing brace`() {
+        // Captured 2026-05-18 on Pixel 9 + E4B: plan ends with `}]` (closing
+        // last step + array) but no trailing `}`. Old parser used
+        // lastIndexOf('}') which also dropped the `]`. New parser walks the
+        // structure and balances at the tail.
+        val truncated = """{"steps": [{"number": 1, "title": "Prep", "brief": "Check."}, {"number":2, "title": "Remove", "brief": "Pull."}, {"number":3, "title": "Install", "brief": "Push."}]"""
+        val state = parseWalkthroughPlanOrFallback(truncated, fallback)
+        assertEquals(3, state.steps.size)
+        assertFalse(state.isFallback)
+        assertEquals("Prep", state.steps[0].title)
+        assertEquals("Install", state.steps[2].title)
+    }
+
+    @Test
+    fun `recovers when both array and outer braces are missing`() {
+        val truncated = """{"steps": [{"number": 1, "title": "Prep", "brief": "Check."}, {"number":2, "title": "Remove", "brief": "Pull."}"""
+        val state = parseWalkthroughPlanOrFallback(truncated, fallback)
+        assertEquals(2, state.steps.size)
+        assertFalse(state.isFallback)
+    }
+
+    @Test
+    fun `recovers when generation cut mid-string`() {
+        // Cancelled-mid-stream from user navigation. The buffer ends inside
+        // an open string — close the string, then close the open object,
+        // array, and outer brace. The final step has a brief of "Sta" only,
+        // which still satisfies the non-blank schema check.
+        val truncated = """{"steps": [{"number": 1, "title": "Prep", "brief": "Check."}, {"number": 2, "title": "Start", "brief": "Sta"""
+        val state = parseWalkthroughPlanOrFallback(truncated, fallback)
+        assertEquals(2, state.steps.size)
+        assertEquals("Sta", state.steps[1].brief)
+        assertFalse(state.isFallback)
+    }
+
+    @Test
+    fun `recovers when output ends on a structural trailing comma`() {
+        // Model emitted the comma but cancelled before the next step object.
+        // Strip the comma, close array + outer.
+        val truncated = """{"steps": [{"number": 1, "title": "Prep", "brief": "Check."},"""
+        val state = parseWalkthroughPlanOrFallback(truncated, fallback)
+        assertEquals(1, state.steps.size)
+        assertEquals("Prep", state.steps[0].title)
+        assertFalse(state.isFallback)
+    }
+
+    @Test
+    fun `already balanced input is returned unchanged shape`() {
+        val balanced = """{"steps": [{"number": 1, "title": "Prep", "brief": "Check."}]}"""
+        val state = parseWalkthroughPlanOrFallback(balanced, fallback)
+        assertEquals(1, state.steps.size)
+        assertFalse(state.isFallback)
+    }
+
+    @Test
+    fun `brace inside a string is not counted as a structural close`() {
+        // The literal `}` inside the brief text must not pop the structural
+        // stack — otherwise the walker would think the object closed early.
+        val json = """{"steps": [{"number": 1, "title": "Prep", "brief": "Watch the }} symbol."}]}"""
+        val state = parseWalkthroughPlanOrFallback(json, fallback)
+        assertEquals(1, state.steps.size)
+        assertEquals("Watch the }} symbol.", state.steps[0].brief)
+        assertFalse(state.isFallback)
+    }
+
+    @Test
+    fun `escaped quote inside a string keeps the walker in-string`() {
+        // The `\"` shouldn't be treated as a closing quote of the title.
+        val json = """{"steps": [{"number": 1, "title": "She said \"go\"", "brief": "Open."}]}"""
+        val state = parseWalkthroughPlanOrFallback(json, fallback)
+        assertEquals(1, state.steps.size)
+        assertEquals("She said \"go\"", state.steps[0].title)
+    }
 }

@@ -35,6 +35,8 @@ Owner: open. Priority: deferred (mitigation holding for the linear flow).
 
 Inference latency on the Issue page is still where Phase 8 left it: ~6s to first token, ~5 tok/s steady state on a Pixel 9 with the GPU backend. Whole synthesis takes ~30s end-to-end. The ThinkingDots animation covers the first-token gap; for real use this still needs to come down.
 
+**Shipped 2026-05-18** (full writeup in `reference/perf_notes_2026-05-18.md`): MTP (capability-gated speculative decoding), `EngineConfig.maxNumTokens = 4096`, `cacheDir`, per-step phase splitting in `PromptBuilder`, brace-balancing tolerance in `WalkthroughPlanState`, and `BenchmarkInfo` logging on all five surfaces. Net wins: synthesis decode 5 → 6.15–7.05 tok/s, walkthrough step decode 6.84–10.22 tok/s (the surface didn't reliably run before — the plan parse fix unblocked it), and walkthrough step prefill down ~21% from the full-procedure shape. **The biggest revealed insight: prefill, not decode, dominates wall-clock cost on every surface** — every token cut from the prompt is roughly as valuable as the entire MTP win.
+
 Options to explore, in rough order of likely payoff:
 
 - **Smaller quantization of E4B.** The current build is whatever single `.litertlm` artifact `litert-community/gemma-4-E4B-it` publishes today (~3.41 GiB on disk; confirm against the repo's quantization label — possibly `int4` or `int8`). If a smaller quantization (e.g. `int4` with weight-only packing, or a tighter sub-channel scheme) appears later, swap and remeasure. Quality may degrade on long-form coherence but our outputs are two short paragraphs.
@@ -48,6 +50,8 @@ When picking this back up, set up a tiny on-device benchmark harness (one `Launc
 ### BenchmarkInfo introspection
 
 `Conversation.getBenchmarkInfo()` is exposed in the SDK but currently unread. Reading it would distinguish two hypotheses for why the hoisted Conversation showed barely-measurable KV-cache reuse between calls in the same session: (a) the SDK re-prefills the full tape on every `sendMessage`, in which case hoisting yields nothing on the prefill side and the only real win is JIT'd decode kernels; or (b) the per-issue prompt (~1200 tokens of DTCs + live readings + template) dominates the system prompt (~250 tokens) in prefill cost, so cache reuse *is* working but the saved fraction is tiny. The two have different next moves — (a) means caching is a dead end on this SDK version, (b) means shrinking the per-issue prompt is a bigger lever than caching.
+
+**Update (2026-05-18, shipped).** Wired. `ExperimentalFlags.enableBenchmark = true` set at engine init; per-surface `logBenchmarkInfo` in `GemmaService` emits a `bench surface=… …` line after each successful generation with `init`, `ttft`, `prefill_tokens`, `decode_tokens`, `prefill_tps`, `decode_tps`. Across the demo session the data settled the open question: hypothesis (b) is right — the per-issue prompt is by far the prefill bottleneck (synthesis 1,449 tok, walkthrough step ~2,100 tok), and prefill takes longer than decode on every surface. Cache reuse may still be happening at the system-prompt level but the gain is invisible against the per-issue prompt cost. Concrete next lever: prompt trimming, not cache plumbing.
 
 ### Few-shot prewarm payload
 
@@ -78,9 +82,7 @@ Still open: vector retrieval. Both stores are today exact-match by DTC code. Fuz
 
 ### Per-DTC fallback synthesis on HomeScreen
 
-**Partially resolved** in `a2095c5` — `model/Fallbacks.kt` now carries a per-DTC `FALLBACK_SYNTHESIS` + `FALLBACK_GOOD_NEWS` map covering 16 codes, plus `synthesizeFromClassification()` which produces a data-driven synthesis from `Classification.supportingSignals` when Gemma is unavailable. Lookup happens via `fallbackSynthesisFor(code)` / `fallbackGoodNewsFor(code)`.
-
-Still open: HomeScreen itself still imports `FALLBACK_SYNTHESIS_MISFIRE` directly (the misfire-specific constant), so a P0171 issue on Home still renders the misfire text. The lookup helpers exist — Home just needs to call them with `issue.dtcs.firstOrNull()?.code`. One-line fix when picked up.
+**Resolved.** `model/Fallbacks.kt` carries a per-DTC `FALLBACK_SYNTHESIS` + `FALLBACK_GOOD_NEWS` map covering 16 codes, plus `synthesizeFromClassification()` which produces a data-driven synthesis from `Classification.supportingSignals` when Gemma is unavailable. `HomeScreen.synthesisForHome` looks up by `issue.dtcs.firstOrNull()?.code` via `fallbackSynthesisFor` / `fallbackGoodNewsFor`, so a P0171 (or any mapped code) renders its own fallback text rather than the misfire default.
 
 ## Hardware path (BLE OBD)
 
@@ -111,6 +113,8 @@ Future approaches when revisited:
 - Post-generation regex sweep replacing approximate matches with ground-truth values
 - Template-based step body with placeholder slots filled deterministically from the procedure
 - Re-evaluation when SDK ships a different decoder or model variant with different tokenization
+
+**Update (2026-05-18, investigation only — not shipped).** LiteRT-LM 0.11.0 exposes `ExperimentalFlags.enableConversationConstrainedDecoding`, which initially looked like the proper fix for this. Probing the SDK and the public docs shows the flag is **tied to Tool Use** — it constrains output to match registered `OpenApiTool` schemas, not arbitrary user-supplied JSON shapes. To use it for the numeric-drift problem we'd need to (a) define an `OpenApiTool` per surface, (b) wire tools into `ConversationConfig(tools = …)`, and (c) reroute the streaming contract from per-token `Flow<String>` deltas to tool-call `Message` payloads. That last step crosses the Phase-5 lock on `inference/GemmaService.kt`'s streaming contract and the five `LaunchedEffect` collect blocks across the screens. Additional risk: E4B's tool-call output quality on a Pixel 9 GPU is unverified — no guarantee the constrained decoder is sharp enough to fix tokenizer-level digit-extension errors that the existing prompt + sampler tightening didn't catch. Deferred until a session where the streaming-contract surgery is in scope.
 
 Not currently blocking: spec-heavy step bodies (the kind that matter for repair correctness) survive correctly. Simple bolt-size patterns drift but rarely affect outcome.
 

@@ -1,3 +1,5 @@
+@file:OptIn(com.google.ai.edge.litertlm.ExperimentalApi::class)
+
 package com.example.carcopilot.inference
 
 import android.content.Context
@@ -8,11 +10,15 @@ import com.example.carcopilot.model.HistoryEntry
 import com.example.carcopilot.model.Issue
 import com.example.carcopilot.ui.PlanStep
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.BenchmarkInfo
+import com.google.ai.edge.litertlm.Capabilities
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +55,19 @@ private const val METRIC_TAG = "CarCopilot"
 private const val NATIVE_SETTLE_MS: Long = 250
 
 /**
+ * Hard ceiling on the LiteRT-LM Engine's working context window. The longest
+ * single prefill we ship today is the walkthrough-step prompt against the
+ * P0087 procedure (~3,520 tokens of system + template + grounding) plus its
+ * bounded ~300-token output; 4096 leaves slack without provisioning KV-cache
+ * buffers for a window we never use. Smaller window → smaller native
+ * allocations, faster [Engine.initialize], and less memory pressure on the
+ * native cleanup race that drives [NATIVE_SETTLE_MS]. Raise this if a future
+ * surface exceeds the cap — overflow surfaces as a generation failure that
+ * falls through the standard Phase-5 fallback path.
+ */
+private const val MAX_CONTEXT_TOKENS: Int = 4096
+
+/**
  * Default sampler used by every surface unless overridden at acquire time.
  * Temperature 0.3 is the right balance for the synthesis / draft / history
  * narrative surfaces — enough latitude for Gemma to sound like a friend on
@@ -69,6 +88,26 @@ private val DEFAULT_SAMPLER = SamplerConfig(topK = 40, topP = 0.95, temperature 
  */
 private val STEP_NUMERIC_FIDELITY_SAMPLER =
     SamplerConfig(topK = 40, topP = 0.5, temperature = 0.1)
+
+/**
+ * Prewarm user message used by [GemmaService.prewarmJob]. Designed as a
+ * one-shot voice + shape anchor for the synthesis surface: it shows one
+ * compact synthesis input alongside the ideal JSON output, then asks for
+ * a single-token "ok" so the cancelled-after-first-token decode wastes
+ * almost nothing. The example output follows the system-prompt voice
+ * rules (one thought per sentence, concrete, "your car", warm closing
+ * line in good_news, no third-person "this is" opener) so the prewarm
+ * turn doubles as a few-shot template the model has just seen when the
+ * first real synthesis call arrives.
+ */
+private val PREWARM_FEW_SHOT: String = """
+    Reference example of synthesis output (voice + JSON shape):
+
+    INPUT: 2015 Toyota Corolla, P0301 misfire on cylinder 1, ignition coil suspected.
+    OUTPUT: {"synthesis":"Cylinder 1 keeps misfiring — you'll feel it as a stumble at idle. On older Corollas this is almost always a worn ignition coil.","good_news":"Your car only needs a 30-minute fix and I'll walk you through it."}
+
+    Reply with the single token "ok" to confirm.
+""".trimIndent()
 
 /**
  * Owns the LiteRT-LM Engine + a single Conversation slot tagged by surface.
@@ -117,8 +156,34 @@ class GemmaService(
     private val initJob: Job = appScope.async(Dispatchers.IO) {
         try {
             val modelFile = stageModel()
+            // Capability-gated Multi-Token Prediction. LiteRT-LM 0.11.0 release
+            // notes claim >2× decode on Gemma 4 mobile GPU with zero quality
+            // degradation when the model file carries the draft head.
+            // Capabilities reads the .litertlm header — cheap relative to the
+            // Engine.initialize() that follows. We probe at runtime instead of
+            // hardcoding so an E2B-vs-E4B variant swap doesn't enable MTP
+            // against a model that doesn't support it.
+            val mtpSupported = try {
+                Capabilities(modelFile.absolutePath).use { it.hasSpeculativeDecodingSupport() }
+            } catch (t: Throwable) {
+                Log.w(TAG, "mtp probe failed: ${t.javaClass.simpleName}: ${t.message}")
+                false
+            }
+            ExperimentalFlags.enableSpeculativeDecoding = if (mtpSupported) true else null
+            Log.i(METRIC_TAG, "mtp model=${BuildConfig.MODEL_VARIANT} enabled=$mtpSupported")
+            // Enable Conversation.getBenchmarkInfo(). Surfaces SDK-authoritative
+            // init time, time-to-first-token, prefill/decode token counts, and
+            // prefill/decode TPS — gives us a real answer to the "is the
+            // hoisted Conversation actually reusing KV cache" question from
+            // FUTURE_WORK §BenchmarkInfo introspection.
+            ExperimentalFlags.enableBenchmark = true
             val e = Engine(
-                EngineConfig(modelPath = modelFile.absolutePath, backend = Backend.GPU())
+                EngineConfig(
+                    modelPath = modelFile.absolutePath,
+                    backend = Backend.GPU(),
+                    maxNumTokens = MAX_CONTEXT_TOKENS,
+                    cacheDir = context.cacheDir.absolutePath,
+                )
             )
             e.initialize()
             engine = e
@@ -139,15 +204,22 @@ class GemmaService(
         try {
             convoMutex.withLock {
                 val convo = acquireConversationForSurfaceLocked("synthesis") ?: return@withLock
-                // Cheapest possible full generation: send "ok", take first token, cancel.
                 // LiteRT-LM Flow does NOT auto-cancel underlying generation when the
                 // consumer stops collecting (callbackFlow.awaitClose is empty), so we
-                // must call cancelProcess() explicitly to stop decode.
-                // Trade-off: the dummy turn (user="ok", assistant="<one token>") stays
-                // in conversation history, polluting context for the first real call.
+                // must call cancelProcess() explicitly to stop decode after first
+                // token. Trade-off: the prewarm turn (user message + the partial
+                // assistant decode before cancel) stays in conversation history.
+                //
+                // Since we're paying that pollution either way, the user message is
+                // designed as a few-shot voice anchor — it carries one worked example
+                // of a synthesis input + the ideal JSON output in the friend-on-the-
+                // phone voice. The next real synthesis call has just seen the shape
+                // and tone it should produce, recovering the slight phrasing drift
+                // we used to see after a "ok"-only prewarm. Asking for "ok" back
+                // keeps the decoded-and-cancelled token cheap.
                 var cancelled = false
                 try {
-                    convo.sendMessageAsync("ok").collect { _ ->
+                    convo.sendMessageAsync(PREWARM_FEW_SHOT).collect { _ ->
                         if (!cancelled) {
                             cancelled = true
                             try { convo.cancelProcess() } catch (_: Throwable) {}
@@ -237,6 +309,7 @@ class GemmaService(
                         "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
                 )
                 if (!failed) {
+                    logBenchmarkInfo("synthesis", convo)
                     Log.i(
                         METRIC_TAG,
                         "infer_raw surface=synthesis model=${BuildConfig.MODEL_VARIANT} text=${
@@ -307,6 +380,7 @@ class GemmaService(
                         "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
                 )
                 if (!failed) {
+                    logBenchmarkInfo("draft", convo)
                     Log.i(
                         METRIC_TAG,
                         "infer_raw surface=draft model=${BuildConfig.MODEL_VARIANT} text=${
@@ -377,6 +451,7 @@ class GemmaService(
                         "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
                 )
                 if (!failed) {
+                    logBenchmarkInfo("history", convo)
                     Log.i(
                         METRIC_TAG,
                         "infer_raw surface=history model=${BuildConfig.MODEL_VARIANT} text=${
@@ -446,6 +521,7 @@ class GemmaService(
                     rawBuf = rawBuf,
                     failed = failed,
                 )
+                if (!failed) logBenchmarkInfo("walkthrough_plan", convo)
             }
         }
     }.flowOn(Dispatchers.IO)
@@ -523,9 +599,36 @@ class GemmaService(
                     rawBuf = rawBuf,
                     failed = failed,
                 )
+                if (!failed) logBenchmarkInfo("walkthrough_step_${planStep.number}", convo)
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Single-line writer for [Conversation.getBenchmarkInfo]. Gated by
+     * [ExperimentalFlags.enableBenchmark] set at Engine init — when the flag
+     * is off, the SDK reports zeros and we still log them (harmless, the
+     * shape stays grep-able). Defensive: a conversation closed in the surface
+     * method's catch handler will throw when this fires from finally, so
+     * swallow rather than mask the underlying failure.
+     */
+    private fun logBenchmarkInfo(surfaceLabel: String, convo: Conversation) {
+        val info: BenchmarkInfo = try {
+            convo.getBenchmarkInfo()
+        } catch (_: Throwable) {
+            return
+        }
+        Log.i(
+            METRIC_TAG,
+            "bench surface=$surfaceLabel model=${BuildConfig.MODEL_VARIANT} " +
+                "init=${"%.3f".format(info.initTimeInSecond)}s " +
+                "ttft=${"%.3f".format(info.timeToFirstTokenInSecond)}s " +
+                "prefill_tokens=${info.lastPrefillTokenCount} " +
+                "decode_tokens=${info.lastDecodeTokenCount} " +
+                "prefill_tps=${"%.2f".format(info.lastPrefillTokensPerSecond)} " +
+                "decode_tps=${"%.2f".format(info.lastDecodeTokensPerSecond)}"
+        )
+    }
 
     /**
      * Single-line metric writer shared by the walkthrough plan and step

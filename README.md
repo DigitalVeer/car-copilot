@@ -71,6 +71,7 @@ The first launch after install copies the model (~10-20s) and warms the GPU shad
 
 - `CLAUDE.md` — project guardrails, architecture, current state, what's in-scope and out-of-scope.
 - `FUTURE_WORK.md` — known issues and the post-demo backlog, grouped by category.
-- `reference/carcopilot_mockup_v09.html` — design source of truth; open in a browser side-by-side with the running app.
+- `reference/carcopilot_mockup_v10_light.html` — design source of truth; open in a browser side-by-side with the running app. (`v09.html` is the archived dark-theme predecessor, kept for the *why* behind the original tokens.)
+- `reference/perf_notes_2026-05-18.md` — Gemma inference perf measurements and what's been tuned. Read this before changing anything in `GemmaService.kt` or the prompt assets.
 - `reference/prompts/*.md` — voice rules (`system.md`) and per-surface prompt templates; mirrored into `app/src/main/assets/`.
 - `reference/carcopilot_android_spec.md`, `reference/carcopilot_phase_6_polish.md`, `reference/carcopilot_design.md` — historical / mixed reference docs. Each carries a STATUS banner at the top describing what's still live vs. archaeology. Don't treat them as current specs.
