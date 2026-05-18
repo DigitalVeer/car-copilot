@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.data.DTCTable
 import com.example.carcopilot.data.DiagramTarget
+import com.example.carcopilot.data.WalkthroughSpec
 import com.example.carcopilot.data.highlightsForPlanStep
 import com.example.carcopilot.inference.GemmaService
 import com.example.carcopilot.model.Issue
@@ -38,6 +39,7 @@ import com.example.carcopilot.model.Severity
 import com.example.carcopilot.model.WalkthroughStep
 import com.example.carcopilot.ui.components.BottomTabBar
 import com.example.carcopilot.ui.components.EngineDiagram
+import com.example.carcopilot.ui.components.SpecsChipRow
 import com.example.carcopilot.ui.components.StepPill
 import com.example.carcopilot.ui.components.StepProgress
 import com.example.carcopilot.ui.components.Tab
@@ -100,6 +102,10 @@ fun WalkthroughScreen(
     val defaultHighlights: List<DiagramTarget> = remember(issue.id) {
         val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
         DTCTable.DEFAULT.lookup(code)?.defaultHighlights.orEmpty()
+    }
+    val procedureSpecs: List<WalkthroughSpec> = remember(issue.id) {
+        val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
+        DTCTable.DEFAULT.lookup(code)?.procedureSpecs.orEmpty()
     }
 
     var pipelineState by remember(issue.id) {
@@ -196,6 +202,7 @@ fun WalkthroughScreen(
                         rendered = ready,
                         stepIndex = stepIndex,
                         defaultHighlights = defaultHighlights,
+                        procedureSpecs = procedureSpecs,
                         severity = issue.severity,
                         onAdvance = { stepIndex += 1 },
                         onFinish = onFinish,
@@ -220,6 +227,7 @@ private fun WalkthroughContent(
     rendered: WalkthroughPipelineState.Ready,
     stepIndex: Int,
     defaultHighlights: List<DiagramTarget>,
+    procedureSpecs: List<WalkthroughSpec>,
     severity: Severity,
     onAdvance: () -> Unit,
     onFinish: () -> Unit,
@@ -249,6 +257,11 @@ private fun WalkthroughContent(
             label = activeRendered.planStep.title,
             severity = severity,
         )
+        if (procedureSpecs.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            SpecsChipRow(specs = procedureSpecs)
+        }
+        Spacer(Modifier.height(14.dp))
         DiagramCard(
             caption = activeRendered.planStep.brief,
             highlights = activeHighlights,

@@ -44,6 +44,14 @@ data class DTCEntry(
      * etc. See [highlightsForPlanStep] for the per-step override logic.
      */
     val defaultHighlights: List<DiagramTarget> = emptyList(),
+    /**
+     * Canonical specs lifted from the curated procedure file. Rendered as
+     * an always-visible chip row on the walkthrough screen so the user has
+     * authoritative torque, gap, time, pressure, and tool-size values
+     * regardless of where Gemma drifts in the generated step body. See
+     * [WalkthroughSpec] for the W2.1 film-around motivation.
+     */
+    val procedureSpecs: List<WalkthroughSpec> = emptyList(),
 )
 
 /**
@@ -109,6 +117,14 @@ I'm trying to keep costs down — happy to bring it in when you have time.""",
                         caveat = "avoid highway until fixed",
                     ),
                     defaultHighlights = listOf(DiagramTarget.COIL_1),
+                    procedureSpecs = listOf(
+                        WalkthroughSpec("Plug torque", "18 Nm (13 ft-lb)"),
+                        WalkthroughSpec("Plug gap", "0.043\""),
+                        WalkthroughSpec("Coil bolt", "10mm"),
+                        WalkthroughSpec("Plug socket", "5/8\" (16mm)"),
+                        WalkthroughSpec("Test drive", "5–10 min mixed"),
+                        WalkthroughSpec("Idle relearn", "30 sec"),
+                    ),
                 ),
                 "P0087" to DTCEntry(
                     code = "P0087",
@@ -159,6 +175,16 @@ Happy to bring it in at your convenience.""",
                     tripReadiness = TripReadiness(
                         headline = "Reduced power — drive carefully",
                         caveat = "avoid highway or heavy loads until fixed",
+                    ),
+                    procedureSpecs = listOf(
+                        WalkthroughSpec("Banjo torque", "30 Nm (22 ft-lb)"),
+                        WalkthroughSpec("Banjo wrench", "14mm / 17mm flare-nut"),
+                        WalkthroughSpec("Primer pumps", "20–30 until firm"),
+                        WalkthroughSpec("Key-on prime", "10–15 sec"),
+                        WalkthroughSpec("Cool wait", "10 min before opening"),
+                        WalkthroughSpec("Healthy idle pressure", "34,500 kPa"),
+                        WalkthroughSpec("Low threshold", "≤ 28,000 kPa"),
+                        WalkthroughSpec("Test drive", "5–10 min moderate load"),
                     ),
                 ),
                 "P0171" to DTCEntry(
