@@ -5,6 +5,9 @@ import com.example.carcopilot.model.Route
 import com.example.carcopilot.model.Severity
 import com.example.carcopilot.model.TripReadiness
 import com.example.carcopilot.model.WalkthroughStep
+import com.example.carcopilot.ui.components.schematic.EngineBaySchematic
+import com.example.carcopilot.ui.components.schematic.FuelSystemSchematic
+import com.example.carcopilot.ui.components.schematic.SchematicSpec
 
 /**
  * Per-DTC classifier output. Combined with an [OBDSnapshot] in
@@ -38,12 +41,19 @@ data class DTCEntry(
     val mechanicDraft: String? = null,
     val tripReadiness: TripReadiness? = null,
     /**
-     * Engine-bay diagram targets the walkthrough screen falls back to when a
-     * plan step has no specific keyword match. For misfire codes this is the
-     * affected coil; future codes can extend to brake-related, cooling-loop,
-     * etc. See [highlightsForPlanStep] for the per-step override logic.
+     * Per-DTC schematic shown beneath the AI strip on the walkthrough screen.
+     * Null means no diagram card — preferable to showing an unrelated one.
+     * Adding a new DTC family with its own topology is a new
+     * [SchematicSpec] data file, not a new composable.
      */
-    val defaultHighlights: List<DiagramTarget> = emptyList(),
+    val schematic: SchematicSpec? = null,
+    /**
+     * Schematic target IDs the walkthrough screen falls back to when a plan
+     * step has no specific keyword match. IDs are resolved by
+     * [SchematicSpec.regions] in the [schematic]; see [DiagramTargets] for
+     * the constants and [highlightsForPlanStep] for the per-step override logic.
+     */
+    val defaultHighlights: List<String> = emptyList(),
     /**
      * Canonical specs lifted from the curated procedure file. Rendered as
      * an always-visible chip row on the walkthrough screen so the user has
@@ -119,7 +129,8 @@ I'm trying to keep costs down — happy to bring it in when you have time.""",
                         headline = "Safe for short trips",
                         caveat = "avoid highway until fixed",
                     ),
-                    defaultHighlights = listOf(DiagramTarget.COIL_1),
+                    schematic = EngineBaySchematic,
+                    defaultHighlights = listOf(DiagramTargets.COIL_1),
                     procedureSpecs = listOf(
                         WalkthroughSpec("Plug torque", "18 Nm (13 ft-lb)"),
                         WalkthroughSpec("Plug gap", "0.043\""),
@@ -179,6 +190,8 @@ Happy to bring it in at your convenience.""",
                         headline = "Reduced power — drive carefully",
                         caveat = "avoid highway or heavy loads until fixed",
                     ),
+                    schematic = FuelSystemSchematic,
+                    defaultHighlights = listOf(DiagramTargets.FUEL_FILTER),
                     procedureSpecs = listOf(
                         WalkthroughSpec("Banjo torque", "30 Nm (22 ft-lb)"),
                         WalkthroughSpec("Banjo wrench", "14mm / 17mm flare-nut"),
