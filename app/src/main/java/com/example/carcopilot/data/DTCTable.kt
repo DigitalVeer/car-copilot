@@ -98,14 +98,14 @@ class DTCTable(private val entries: Map<String, DTCEntry>) {
                         WalkthroughStep(
                             number = 1,
                             title = "Find the coils",
-                            body = "- Pop the hood and find the [Y]four small black blocks[/Y] sitting in a row on top of the engine.\n- Each one has a single wire connector — those are the ignition coils.\n- [Y]Cylinder 1[/Y] is closest to the timing belt side, facing the front of the car.",
+                            body = "- Pop the hood and find the [Y]four slim black blocks[/Y] sitting in a row on top of the engine.\n- Each one has a single wire connector — those are the ignition coils.\n- [Y]Cylinder 1[/Y] sits on the [Y]timing-chain side[/Y] — the passenger side of the car on this EA211.",
                             diagramHint = "Engine bay — cylinder 1 highlighted",
                         ),
                         WalkthroughStep(
                             number = 2,
                             title = "Disconnect coil 1",
-                            body = "- Squeeze the plastic tab on the wire connector and pull [Y]straight up[/Y] — it releases with a soft click.\n- Use a [Y]10mm socket[/Y] to remove the single bolt holding the coil down.\n- Pocket the bolt so you don't lose it.",
-                            diagramHint = "Connector + bolt — both on top of the coil",
+                            body = "- Squeeze the plastic tab on the wire connector and pull [Y]straight up[/Y] — it releases with a soft click.\n- The EA211 coil is held by a [Y]spring clip[/Y], not a bolt — slide the clip sideways with a small flat screwdriver and it pops loose.\n- Drop the clip into a parts tray so it doesn't end up under the engine.",
+                            diagramHint = "Connector + spring clip — both on top of the coil",
                         ),
                         WalkthroughStep(
                             number = 3,
@@ -116,13 +116,13 @@ class DTCTable(private val entries: Map<String, DTCEntry>) {
                         WalkthroughStep(
                             number = 4,
                             title = "Drop in the new one",
-                            body = "- Push the new coil [Y]straight down[/Y] until you feel it seat onto the spark plug.\n- Bolt it back down — [Y]snug, not tight[/Y].\n- Reconnect the wire until you hear the click.\n- Close the hood and start the engine — the misfire should clear in a minute or two.",
-                            diagramHint = "Snug, not tight — and listen for the click",
+                            body = "- Push the new coil [Y]straight down[/Y] until you feel it seat onto the spark plug.\n- Slide the [Y]spring clip[/Y] back into place — it snaps home when it's fully seated.\n- Reconnect the wire until you hear the click.\n- Close the hood and start the engine — the misfire should clear in a minute or two.",
+                            diagramHint = "Slide the clip until it snaps — and listen for the wire click",
                         ),
                     ),
-                    mechanicDraft = """Hi — my 2009 Corolla (187k miles) has been showing a P0301 misfire on cylinder 1 for the last few drives. O2 sensor is reading rich and idle is rough.
+                    mechanicDraft = """Hi — my 2021 VW Jetta (42k miles, 1.4 TSI) has been showing a P0301 misfire on cylinder 1 for the last few drives. O2 sensor is reading rich and idle is rough.
 
-Looks like it might be an ignition coil but I wanted a pro to confirm before I buy parts. Could you give me a rough estimate?
+Looks like it might be an ignition coil — these TSI coils are known to fail early — but I wanted a pro to confirm before I buy parts. Could you give me a rough estimate?
 
 I'm trying to keep costs down — happy to bring it in when you have time.""",
                     tripReadiness = TripReadiness(
@@ -132,10 +132,10 @@ I'm trying to keep costs down — happy to bring it in when you have time.""",
                     schematic = EngineBaySchematic,
                     defaultHighlights = listOf(DiagramTargets.COIL_1),
                     procedureSpecs = listOf(
-                        WalkthroughSpec("Plug torque", "18 Nm (13 ft-lb)"),
-                        WalkthroughSpec("Plug gap", "0.043\""),
-                        WalkthroughSpec("Coil bolt", "10mm"),
-                        WalkthroughSpec("Plug socket", "5/8\" (16mm)"),
+                        WalkthroughSpec("Plug torque", "25 Nm (18 ft-lb)"),
+                        WalkthroughSpec("Plug gap", "0.031\" (0.8mm)"),
+                        WalkthroughSpec("Coil hold-down", "spring clip"),
+                        WalkthroughSpec("Plug socket", "14mm thin-wall"),
                         WalkthroughSpec("Test drive", "5–10 min mixed"),
                         WalkthroughSpec("Idle relearn", "30 sec"),
                     ),

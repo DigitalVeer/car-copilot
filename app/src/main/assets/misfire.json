@@ -1,11 +1,11 @@
 {
   "captured_at": "2026-05-14T19:42:11Z",
   "vehicle": {
-    "year": 2009,
-    "make": "Toyota",
-    "model": "Corolla",
-    "mileage": 187000,
-    "display_name": "2009 Corolla"
+    "year": 2021,
+    "make": "Volkswagen",
+    "model": "Jetta",
+    "mileage": 42000,
+    "display_name": "2021 VW Jetta"
   },
   "raw_dtcs": ["P0301"],
   "pending_dtcs": [],
