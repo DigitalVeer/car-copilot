@@ -9,7 +9,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +47,7 @@ import com.example.carcopilot.ui.components.Tab
 import com.example.carcopilot.ui.components.ThinkingDots
 import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
+import com.example.carcopilot.ui.components.scalePressable
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
 
@@ -110,7 +110,7 @@ fun MechanicDraftScreen(
                     isFallback = false,
                 ),
                 label = "Drafted for you",
-                severity = Severity.warning,
+                severity = issue.severity,
             )
             DraftCard(state = state)
             Spacer(Modifier.height(20.dp))
@@ -179,7 +179,7 @@ private fun DraftCard(state: MechanicDraftState) {
                 }
                 Text(
                     text = text,
-                    style = CarCopilotTypography.CardSubtitle.copy(lineHeight = 22.4.sp),
+                    style = CarCopilotTypography.CardSubtitle.copy(lineHeight = 22.sp),
                     color = CarCopilotColors.Text,
                 )
             }
@@ -249,9 +249,9 @@ private fun PrimaryCta(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .scalePressable(enabled = enabled, onClick = onClick)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
-            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -270,9 +270,9 @@ private fun GhostCta(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .scalePressable(enabled = enabled, onClick = onClick)
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, CarCopilotColors.LineBright.copy(alpha = opacity), RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {

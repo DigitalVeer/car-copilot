@@ -19,16 +19,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -93,21 +99,7 @@ fun WalkthroughLoadingPage(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = "PREPARING YOUR WALKTHROUGH",
-            style = CarCopilotTypography.TabLabel.copy(
-                letterSpacing = 0.18.em,
-                fontWeight = FontWeight.Medium,
-            ),
-            color = CarCopilotColors.Text,
-        )
-        Spacer(Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .width(28.dp)
-                .height(1.5.dp)
-                .background(CarCopilotColors.AccentInline.copy(alpha = 0.4f)),
-        )
+        ColorizedHeading()
         Spacer(Modifier.height(36.dp))
         BouncingDots()
         Spacer(Modifier.height(32.dp))
@@ -133,6 +125,80 @@ fun WalkthroughLoadingPage(
                 color = CarCopilotColors.TextFaint,
             )
         }
+    }
+}
+
+/**
+ * Loader title with the middle word colorized indigo and an accent hairline
+ * sitting directly beneath it. The previous version used a single Text and
+ * a 28dp hairline centered under the whole phrase — geometrically off-center
+ * relative to YOUR because PREPARING (9 chars) and WALKTHROUGH (11 chars)
+ * flank it asymmetrically. Measuring the actual glyph rect via
+ * [rememberTextMeasurer] anchors the bar to YOUR's literal horizontal span
+ * plus 4dp optical padding, so the colorize and the underline read as one
+ * intentional emphasis instead of a decorative line that floats nearby.
+ */
+@Composable
+private fun ColorizedHeading() {
+    val baseStyle = remember {
+        CarCopilotTypography.TabLabel.copy(
+            letterSpacing = 0.18.em,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+    val annotated = remember {
+        buildAnnotatedString {
+            append("PREPARING ")
+            withStyle(
+                SpanStyle(
+                    color = CarCopilotColors.AccentInline,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+            ) {
+                append("YOUR")
+            }
+            append(" WALKTHROUGH")
+        }
+    }
+    val measurer = rememberTextMeasurer()
+    val layout = remember(annotated, baseStyle, measurer) {
+        measurer.measure(annotated, baseStyle)
+    }
+    val density = LocalDensity.current
+    val yourStartIdx = "PREPARING ".length
+    val yourEndIdx = yourStartIdx + "YOUR".length
+    val yourLeftPx = layout.getBoundingBox(yourStartIdx).left
+    val yourRightPx = layout.getBoundingBox(yourEndIdx - 1).right
+    val totalWidthPx = layout.size.width.toFloat()
+    val padPx = with(density) { 4.dp.toPx() }
+    // Coerce so the bar never escapes the heading's own bounds — defensive
+    // against future copy edits where the middle word lands closer to either
+    // edge than the optical padding allows.
+    val safePad = padPx
+        .coerceAtMost(yourLeftPx)
+        .coerceAtMost(totalWidthPx - yourRightPx)
+    val barLeftPx = yourLeftPx - safePad
+    val barWidthPx = (yourRightPx - yourLeftPx) + safePad * 2
+
+    Text(
+        text = annotated,
+        style = baseStyle,
+        color = CarCopilotColors.Text,
+    )
+    Spacer(Modifier.height(7.dp))
+    Box(
+        modifier = Modifier
+            .width(with(density) { totalWidthPx.toDp() })
+            .height(1.5.dp)
+            .padding(start = with(density) { barLeftPx.toDp() }),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(with(density) { barWidthPx.toDp() })
+                .height(1.5.dp)
+                .clip(RoundedCornerShape(0.75.dp))
+                .background(CarCopilotColors.AccentInline.copy(alpha = 0.55f)),
+        )
     }
 }
 

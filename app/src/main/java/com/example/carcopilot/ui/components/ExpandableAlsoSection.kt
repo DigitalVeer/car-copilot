@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,10 +51,10 @@ fun ExpandableAlsoSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .scalePressable { isExpanded = !isExpanded }
                 .clip(RoundedCornerShape(12.dp))
                 .background(CarCopilotColors.PhoneCard)
                 .border(1.dp, CarCopilotColors.Line, RoundedCornerShape(12.dp))
-                .clickable { isExpanded = !isExpanded }
                 .padding(16.dp),
         ) {
             Row(

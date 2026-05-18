@@ -3,7 +3,6 @@ package com.example.carcopilot.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,7 +50,7 @@ fun IssueCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    CardFrame(severity = issue.severity, modifier = modifier.clickable(onClick = onClick)) {
+    CardFrame(severity = issue.severity, modifier = modifier.scalePressable(onClick = onClick)) {
         CardCopy(issue)
         Spacer(Modifier.height(20.dp))
         PrimaryCta(label = ctaLabel, severity = issue.severity)
@@ -262,12 +261,17 @@ private fun BangMark(color: Color) {
 @Composable
 private fun PrimaryCta(label: String, severity: Severity, onClick: (() -> Unit)? = null) {
     val bg = severity.accentColor()
-    val fg = if (severity == Severity.severe) Color.White else CarCopilotColors.AccentDeep
+    // White on iOS green fails contrast (~2.0:1); use near-black for the
+    // healthy path. Severe-red and indigo-warning carry white text fine.
+    val fg = when (severity) {
+        Severity.healthy -> CarCopilotColors.Text
+        else -> CarCopilotColors.AccentDeep
+    }
     val mod = Modifier
         .fillMaxWidth()
+        .let { if (onClick != null) it.scalePressable(onClick = onClick) else it }
         .clip(RoundedCornerShape(10.dp))
         .background(bg)
-        .let { if (onClick != null) it.clickable(onClick = onClick) else it }
         .padding(vertical = 13.dp, horizontal = 16.dp)
     Box(modifier = mod, contentAlignment = Alignment.Center) {
         Text(
@@ -284,9 +288,9 @@ private fun GhostCta(label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .scalePressable(onClick = onClick)
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, CarCopilotColors.LineBright, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {

@@ -3,7 +3,6 @@ package com.example.carcopilot.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -132,6 +131,7 @@ private fun VehicleSubtitle(text: String) {
 private fun BackChip(onClick: () -> Unit) {
     Row(
         modifier = Modifier
+            .scalePressable(onClick = onClick)
             .clip(RoundedCornerShape(999.dp))
             .background(CarCopilotColors.AccentSoft)
             .border(
@@ -139,7 +139,6 @@ private fun BackChip(onClick: () -> Unit) {
                 color = CarCopilotColors.AccentInline.copy(alpha = 0.18f),
                 shape = RoundedCornerShape(999.dp),
             )
-            .clickable(onClick = onClick)
             .padding(start = 9.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp),

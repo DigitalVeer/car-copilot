@@ -1,0 +1,1515 @@
+From 9f1b0803de545065cefb9992d99f9362ccb94596 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 18 May 2026 13:19:52 +0000
+Subject: [PATCH] feat(walkthrough): data-driven schematic spec + fuel-system
+ layout for P0087
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Replace the hard-coded engine-bay Canvas with a generic SchematicRenderer
+that consumes a per-DTC SchematicSpec. The renderer walks a declarative
+list of shapes and overlays accent regions for any highlighted ID, so
+adding a new DTC family is one data file (no Canvas math). Ships:
+
+- SchematicSpec + SchematicShape sealed types under ui/components/schematic
+- EngineBaySchematic — coordinates lifted verbatim from EngineDiagram so
+  P0301 renders the same shape
+- FuelSystemSchematic — new diesel common-rail layout (tank → filter →
+  primer bulb → HP pump → rail → injectors) so P0087 finally has a
+  relevant diagram
+- Aesthetic polish inside the renderer: faint background grid, inner
+  bezel, highlight-alpha pulse (1.5s reverse, matches the loading-page
+  dots), shadow-layered label text for legibility
+- DiagramTarget enum → DiagramTargets string constants so new targets
+  (FUEL_FILTER, PRIMER_BULB, FUEL_RAIL) extend without enum churn;
+  highlightsForPlanStep gains filter/prime/rail/pressure keywords
+- WalkthroughScreen hides the diagram card entirely when schematic is
+  null (P0171, P0118) instead of showing an irrelevant engine bay
+
+P0301 should render identically apart from the pulse/grid; P0087 now
+shows a fuel-system diagram driven by the same step keyword matcher.
+
+https://claude.ai/code/session_01HH8dLay3kAvGXZwTdHqq4v
+---
+ .../com/example/carcopilot/data/DTCTable.kt   |  25 +-
+ .../example/carcopilot/data/DiagramTarget.kt  |  61 ++--
+ .../carcopilot/ui/WalkthroughScreen.kt        |  41 ++-
+ .../carcopilot/ui/components/EngineDiagram.kt | 326 ------------------
+ .../schematic/EngineBaySchematic.kt           | 189 ++++++++++
+ .../schematic/FuelSystemSchematic.kt          | 231 +++++++++++++
+ .../components/schematic/SchematicRenderer.kt | 310 +++++++++++++++++
+ .../ui/components/schematic/SchematicSpec.kt  | 106 ++++++
+ 8 files changed, 917 insertions(+), 372 deletions(-)
+ delete mode 100644 app/src/main/java/com/example/carcopilot/ui/components/EngineDiagram.kt
+ create mode 100644 app/src/main/java/com/example/carcopilot/ui/components/schematic/EngineBaySchematic.kt
+ create mode 100644 app/src/main/java/com/example/carcopilot/ui/components/schematic/FuelSystemSchematic.kt
+ create mode 100644 app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicRenderer.kt
+ create mode 100644 app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicSpec.kt
+
+diff --git a/app/src/main/java/com/example/carcopilot/data/DTCTable.kt b/app/src/main/java/com/example/carcopilot/data/DTCTable.kt
+index 0811471..b8219b8 100644
+--- a/app/src/main/java/com/example/carcopilot/data/DTCTable.kt
++++ b/app/src/main/java/com/example/carcopilot/data/DTCTable.kt
+@@ -5,6 +5,9 @@ import com.example.carcopilot.model.Route
+ import com.example.carcopilot.model.Severity
+ import com.example.carcopilot.model.TripReadiness
+ import com.example.carcopilot.model.WalkthroughStep
++import com.example.carcopilot.ui.components.schematic.EngineBaySchematic
++import com.example.carcopilot.ui.components.schematic.FuelSystemSchematic
++import com.example.carcopilot.ui.components.schematic.SchematicSpec
+ 
+ /**
+  * Per-DTC classifier output. Combined with an [OBDSnapshot] in
+@@ -38,12 +41,19 @@ data class DTCEntry(
+     val mechanicDraft: String? = null,
+     val tripReadiness: TripReadiness? = null,
+     /**
+-     * Engine-bay diagram targets the walkthrough screen falls back to when a
+-     * plan step has no specific keyword match. For misfire codes this is the
+-     * affected coil; future codes can extend to brake-related, cooling-loop,
+-     * etc. See [highlightsForPlanStep] for the per-step override logic.
++     * Per-DTC schematic shown beneath the AI strip on the walkthrough screen.
++     * Null means no diagram card — preferable to showing an unrelated one.
++     * Adding a new DTC family with its own topology is a new
++     * [SchematicSpec] data file, not a new composable.
+      */
+-    val defaultHighlights: List<DiagramTarget> = emptyList(),
++    val schematic: SchematicSpec? = null,
++    /**
++     * Schematic target IDs the walkthrough screen falls back to when a plan
++     * step has no specific keyword match. IDs are resolved by
++     * [SchematicSpec.regions] in the [schematic]; see [DiagramTargets] for
++     * the constants and [highlightsForPlanStep] for the per-step override logic.
++     */
++    val defaultHighlights: List<String> = emptyList(),
+     /**
+      * Canonical specs lifted from the curated procedure file. Rendered as
+      * an always-visible chip row on the walkthrough screen so the user has
+@@ -119,7 +129,8 @@ I'm trying to keep costs down — happy to bring it in when you have time.""",
+                         headline = "Safe for short trips",
+                         caveat = "avoid highway until fixed",
+                     ),
+-                    defaultHighlights = listOf(DiagramTarget.COIL_1),
++                    schematic = EngineBaySchematic,
++                    defaultHighlights = listOf(DiagramTargets.COIL_1),
+                     procedureSpecs = listOf(
+                         WalkthroughSpec("Plug torque", "18 Nm (13 ft-lb)"),
+                         WalkthroughSpec("Plug gap", "0.043\""),
+@@ -179,6 +190,8 @@ Happy to bring it in at your convenience.""",
+                         headline = "Reduced power — drive carefully",
+                         caveat = "avoid highway or heavy loads until fixed",
+                     ),
++                    schematic = FuelSystemSchematic,
++                    defaultHighlights = listOf(DiagramTargets.FUEL_FILTER),
+                     procedureSpecs = listOf(
+                         WalkthroughSpec("Banjo torque", "30 Nm (22 ft-lb)"),
+                         WalkthroughSpec("Banjo wrench", "14mm / 17mm flare-nut"),
+diff --git a/app/src/main/java/com/example/carcopilot/data/DiagramTarget.kt b/app/src/main/java/com/example/carcopilot/data/DiagramTarget.kt
+index 004d473..6bcdc94 100644
+--- a/app/src/main/java/com/example/carcopilot/data/DiagramTarget.kt
++++ b/app/src/main/java/com/example/carcopilot/data/DiagramTarget.kt
+@@ -3,36 +3,42 @@ package com.example.carcopilot.data
+ import com.example.carcopilot.ui.PlanStep
+ 
+ /**
+- * Per-step highlight targets for the engine-bay diagram. Demo-scoped to the
+- * P0301 misfire procedure — every value here renders distinctly on the
+- * existing [com.example.carcopilot.ui.components.EngineDiagram]. New DTCs
+- * that need new targets are a one-line enum extension plus the geometry
+- * change to draw them.
++ * Per-step highlight target IDs for walkthrough schematics.
+  *
+- * COIL_1..COIL_4 and SPARK_PLUG share a geometric location in the bay
+- * (the plug sits inside the coil well), so the diagram renders them at
+- * different scales — coil = outer box + arrow, plug = inner dot inside the
+- * cylinder 1 well — so the user sees movement on a Phase 2 → Phase 3
+- * transition rather than the highlight standing still.
++ * String IDs (rather than an enum) so new DTC families can introduce their
++ * own targets without churning a shared enum. The schematic spec
++ * (`SchematicSpec.regions`) decides which IDs are renderable in its own
++ * topology; an unknown ID simply renders nothing.
++ *
++ * Naming convention: SCREAMING_SNAKE for the constants here, matching
++ * the legacy enum values so existing data (`P0301: defaultHighlights =
++ * listOf(DiagramTargets.COIL_1)`) reads the same.
+  */
+-enum class DiagramTarget {
+-    COIL_1,
+-    COIL_2,
+-    COIL_3,
+-    COIL_4,
+-    SPARK_PLUG,
+-    BATTERY_NEG,
++object DiagramTargets {
++    // Engine-bay schematic (P0301 family)
++    const val COIL_1 = "COIL_1"
++    const val COIL_2 = "COIL_2"
++    const val COIL_3 = "COIL_3"
++    const val COIL_4 = "COIL_4"
++    const val SPARK_PLUG = "SPARK_PLUG"
++    const val BATTERY_NEG = "BATTERY_NEG"
++
++    // Fuel-system schematic (P0087 family)
++    const val FUEL_FILTER = "FUEL_FILTER"
++    const val PRIMER_BULB = "PRIMER_BULB"
++    const val FUEL_RAIL = "FUEL_RAIL"
+ }
+ 
+ /**
+- * Map a plan step to the diagram targets it should highlight. Deterministic
++ * Map a plan step to the diagram target IDs it should highlight. Deterministic
+  * keyword scan over `title + brief` — no Gemma decision involved. If nothing
+  * matches, falls back to [defaults] (typically the DTCEntry's
+  * defaultHighlights) so the diagram is never blank.
+  *
+- * The keyword order matters: "battery" wins over "coil" because the prep
+- * phase often mentions disconnecting the battery near coil work, and the
+- * battery is the more specific action.
++ * Keyword priority matters. "battery" wins over "coil" because the prep phase
++ * often mentions disconnecting the battery near coil work, and the battery is
++ * the more specific action. "filter" wins over "rail" because Phase 3 of the
++ * P0087 procedure says "swap the filter" with a passing mention of the rail.
+  *
+  * Note on "spark" vs "plug": we key on "spark" specifically because a step
+  * about "unplugging the connector" should not be misread as a spark-plug
+@@ -40,13 +46,16 @@ enum class DiagramTarget {
+  */
+ fun highlightsForPlanStep(
+     planStep: PlanStep,
+-    defaults: List<DiagramTarget>,
+-): List<DiagramTarget> {
++    defaults: List<String>,
++): List<String> {
+     val haystack = (planStep.title + " " + planStep.brief).lowercase()
+     return when {
+-        "battery" in haystack -> listOf(DiagramTarget.BATTERY_NEG)
+-        "spark" in haystack -> listOf(DiagramTarget.SPARK_PLUG)
+-        "coil" in haystack -> listOf(DiagramTarget.COIL_1)
++        "battery" in haystack -> listOf(DiagramTargets.BATTERY_NEG)
++        "spark" in haystack -> listOf(DiagramTargets.SPARK_PLUG)
++        "coil" in haystack -> listOf(DiagramTargets.COIL_1)
++        "filter" in haystack -> listOf(DiagramTargets.FUEL_FILTER)
++        "prime" in haystack -> listOf(DiagramTargets.PRIMER_BULB)
++        "rail" in haystack || "pressure" in haystack -> listOf(DiagramTargets.FUEL_RAIL)
+         else -> defaults
+     }
+ }
+diff --git a/app/src/main/java/com/example/carcopilot/ui/WalkthroughScreen.kt b/app/src/main/java/com/example/carcopilot/ui/WalkthroughScreen.kt
+index 4cce534..2b54d73 100644
+--- a/app/src/main/java/com/example/carcopilot/ui/WalkthroughScreen.kt
++++ b/app/src/main/java/com/example/carcopilot/ui/WalkthroughScreen.kt
+@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.unit.dp
+ import com.example.carcopilot.data.DTCTable
+-import com.example.carcopilot.data.DiagramTarget
+ import com.example.carcopilot.data.WalkthroughSpec
+ import com.example.carcopilot.data.highlightsForPlanStep
+ import com.example.carcopilot.inference.GemmaService
+@@ -39,8 +38,9 @@ import com.example.carcopilot.model.Issue
+ import com.example.carcopilot.model.Severity
+ import com.example.carcopilot.model.WalkthroughStep
+ import com.example.carcopilot.ui.components.BottomTabBar
+-import com.example.carcopilot.ui.components.EngineDiagram
+ import com.example.carcopilot.ui.components.SpecsChipRow
++import com.example.carcopilot.ui.components.schematic.SchematicRenderer
++import com.example.carcopilot.ui.components.schematic.SchematicSpec
+ import com.example.carcopilot.ui.components.StepPill
+ import com.example.carcopilot.ui.components.StepProgress
+ import com.example.carcopilot.ui.components.Tab
+@@ -123,10 +123,14 @@ fun WalkthroughScreen(
+             brief = it.diagramHint ?: it.title,
+         ) }
+     }
+-    val defaultHighlights: List<DiagramTarget> = remember(issue.id) {
++    val defaultHighlights: List<String> = remember(issue.id) {
+         val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
+         DTCTable.DEFAULT.lookup(code)?.defaultHighlights.orEmpty()
+     }
++    val schematic: SchematicSpec? = remember(issue.id) {
++        val code = issue.dtcs.firstOrNull()?.code ?: return@remember null
++        DTCTable.DEFAULT.lookup(code)?.schematic
++    }
+     val procedureSpecs: List<WalkthroughSpec> = remember(issue.id) {
+         val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
+         DTCTable.DEFAULT.lookup(code)?.procedureSpecs.orEmpty()
+@@ -179,7 +183,7 @@ fun WalkthroughScreen(
+         val totalSteps = planSteps.size
+         val rendered = mutableListOf<RenderedStep>()
+         for ((idx, planStep) in planSteps.withIndex()) {
+-            pipelineState = WalkthroughPipelineState.BuildingStep(currentIdx = idx, total = totalSteps)
++            pipelineState = WalkthroughPipelineState.BuildingStep(plan = planSteps, currentIdx = idx)
+             val cannedFallback = cannedSteps.getOrNull(idx)?.body ?: GENERIC_STEP_FALLBACK
+             val stepBuf = StringBuilder()
+             val parsed: WalkthroughStepState.Ready = try {
+@@ -225,11 +229,12 @@ fun WalkthroughScreen(
+                 label = "walkthrough-loading-to-content",
+             ) { contentReady ->
+                 if (!contentReady || ready == null) {
+-                    WalkthroughLoadingPage()
++                    WalkthroughLoadingPage(state = pipelineState)
+                 } else {
+                     WalkthroughContent(
+                         rendered = ready,
+                         stepIndex = stepIndex,
++                        schematic = schematic,
+                         defaultHighlights = defaultHighlights,
+                         procedureSpecs = procedureSpecs,
+                         severity = issue.severity,
+@@ -256,7 +261,8 @@ fun WalkthroughScreen(
+ private fun WalkthroughContent(
+     rendered: WalkthroughPipelineState.Ready,
+     stepIndex: Int,
+-    defaultHighlights: List<DiagramTarget>,
++    schematic: SchematicSpec?,
++    defaultHighlights: List<String>,
+     procedureSpecs: List<WalkthroughSpec>,
+     severity: Severity,
+     onAdvance: () -> Unit,
+@@ -266,7 +272,7 @@ private fun WalkthroughContent(
+     val steps = rendered.steps
+     val total = steps.size
+     val activeRendered = steps.getOrNull(stepIndex) ?: return
+-    val activeHighlights = highlightsForPlanStep(activeRendered.planStep, defaultHighlights)
++    val activeHighlights = highlightsForPlanStep(activeRendered.planStep, defaultHighlights).toSet()
+     val isFirst = stepIndex == 0
+     val isLast = stepIndex == total - 1
+     val nextLabel = if (isLast) "Finish →" else "Done — next step →"
+@@ -293,11 +299,14 @@ private fun WalkthroughContent(
+             Spacer(Modifier.height(14.dp))
+             SpecsChipRow(specs = procedureSpecs)
+         }
+-        Spacer(Modifier.height(14.dp))
+-        DiagramCard(
+-            caption = activeRendered.planStep.brief,
+-            highlights = activeHighlights,
+-        )
++        if (schematic != null) {
++            Spacer(Modifier.height(14.dp))
++            DiagramCard(
++                caption = activeRendered.planStep.brief,
++                schematic = schematic,
++                highlights = activeHighlights,
++            )
++        }
+         Spacer(Modifier.height(18.dp))
+         StepControls(
+             backEnabled = !isFirst,
+@@ -320,7 +329,11 @@ private fun buildReadyFromFallback(
+ }
+ 
+ @Composable
+-private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
++private fun DiagramCard(
++    caption: String,
++    schematic: SchematicSpec,
++    highlights: Set<String>,
++) {
+     Column(
+         modifier = Modifier
+             .fillMaxWidth()
+@@ -336,7 +349,7 @@ private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
+                 .background(CarCopilotColors.SchematicSurface)
+                 .padding(18.dp),
+         ) {
+-            EngineDiagram(highlights = highlights)
++            SchematicRenderer(spec = schematic, highlightedIds = highlights)
+         }
+         Spacer(Modifier.height(12.dp))
+         Text(
+diff --git a/app/src/main/java/com/example/carcopilot/ui/components/EngineDiagram.kt b/app/src/main/java/com/example/carcopilot/ui/components/EngineDiagram.kt
+deleted file mode 100644
+index 5fc3565..0000000
+--- a/app/src/main/java/com/example/carcopilot/ui/components/EngineDiagram.kt
++++ /dev/null
+@@ -1,326 +0,0 @@
+-package com.example.carcopilot.ui.components
+-
+-import android.graphics.Paint
+-import android.graphics.Typeface
+-import androidx.compose.foundation.Canvas
+-import androidx.compose.foundation.layout.aspectRatio
+-import androidx.compose.foundation.layout.fillMaxWidth
+-import androidx.compose.runtime.Composable
+-import androidx.compose.runtime.remember
+-import androidx.compose.ui.Modifier
+-import androidx.compose.ui.geometry.Offset
+-import androidx.compose.ui.geometry.Size
+-import androidx.compose.ui.graphics.Path
+-import androidx.compose.ui.graphics.StrokeCap
+-import androidx.compose.ui.graphics.StrokeJoin
+-import androidx.compose.ui.graphics.drawscope.DrawScope
+-import androidx.compose.ui.graphics.drawscope.Stroke
+-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+-import androidx.compose.ui.graphics.nativeCanvas
+-import androidx.compose.ui.graphics.toArgb
+-import androidx.compose.ui.platform.LocalContext
+-import androidx.compose.ui.unit.dp
+-import androidx.core.content.res.ResourcesCompat
+-import com.example.carcopilot.R
+-import com.example.carcopilot.data.DiagramTarget
+-import com.example.carcopilot.ui.theme.CarCopilotColors
+-
+-private const val VIEW_W = 280f
+-private const val VIEW_H = 180f
+-
+-/**
+- * Port of mockup §06 walkthrough engine-bay SVG.
+- *
+- * ViewBox is 280×180. Aspect ratio is fixed; the surrounding Box determines
+- * absolute width. Shapes go on a Canvas; the labels use nativeCanvas.drawText
+- * with the bundled JetBrains Mono typeface so we don't have to position
+- * Compose Text overlays at sub-dp precision.
+- *
+- * Highlight rendering is layered so a COIL_1 → SPARK_PLUG transition looks
+- * like the focus drilling into the cylinder, not standing still on the
+- * same shape. Labels are terse identifiers only — the AI strip body
+- * explains what the user is doing, the diagram identifies what the body
+- * is talking about:
+- *   - COIL_n  → fill the 32×38 coil rectangle in accent, draw top arrow
+- *               + "COIL n" label.
+- *   - SPARK_PLUG → small accent dot inside the cylinder 1 coil well (it
+- *               always means cylinder 1 in the P0301 demo), with a "PLUG"
+- *               label below the well so the eye moves further down than
+- *               for the coil highlight.
+- *   - BATTERY_NEG → accent the negative terminal of the battery silhouette
+- *               at the bottom-left, with a "(−)" label.
+- *
+- * Empty highlights render the diagram with no accents — a calm "this is the
+- * engine bay you're working in" overview state.
+- */
+-@Composable
+-fun EngineDiagram(
+-    highlights: List<DiagramTarget> = emptyList(),
+-    modifier: Modifier = Modifier,
+-) {
+-    val context = LocalContext.current
+-    val typeface: Typeface = remember(context) {
+-        ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular) ?: Typeface.MONOSPACE
+-    }
+-    val frame = CarCopilotColors.LineBright
+-    val accent = CarCopilotColors.Accent
+-    val muted = CarCopilotColors.TextFaint
+-    val valveCoverFill = androidx.compose.ui.graphics.Color(0xFF1A1A18)
+-    val valveCoverStroke = androidx.compose.ui.graphics.Color(0xFF4A4A47)
+-    val coilStroke = androidx.compose.ui.graphics.Color(0xFF4A4A47)
+-    val engineStroke = androidx.compose.ui.graphics.Color(0xFF3A3A37)
+-
+-    val highlightedCoils: Set<Int> = highlights.mapNotNull { target ->
+-        when (target) {
+-            DiagramTarget.COIL_1 -> 1
+-            DiagramTarget.COIL_2 -> 2
+-            DiagramTarget.COIL_3 -> 3
+-            DiagramTarget.COIL_4 -> 4
+-            else -> null
+-        }
+-    }.toSet()
+-    val sparkPlugHighlighted = DiagramTarget.SPARK_PLUG in highlights
+-    val batteryNegHighlighted = DiagramTarget.BATTERY_NEG in highlights
+-    val primaryHighlight = highlights.firstOrNull()
+-
+-    Canvas(
+-        modifier = modifier
+-            .fillMaxWidth()
+-            .aspectRatio(VIEW_W / VIEW_H),
+-    ) {
+-        val sx = size.width / VIEW_W
+-        val sy = size.height / VIEW_H
+-        // Engine block outline
+-        drawRoundedRect(30f, 55f, 220f, 95f, 6f, sx, sy, color = engineStroke, strokeWidth = 1.5f * sx)
+-        // Valve cover
+-        drawRoundedRect(42f, 70f, 196f, 40f, 3f, sx, sy, color = valveCoverFill, fill = true)
+-        drawRoundedRect(42f, 70f, 196f, 40f, 3f, sx, sy, color = valveCoverStroke, strokeWidth = 1f * sx)
+-        // Four coils
+-        val coilXs = listOf(56f, 100f, 144f, 188f)
+-        coilXs.forEachIndexed { idx, x ->
+-            val cylinder = idx + 1
+-            val active = cylinder in highlightedCoils
+-            val color = if (active) accent else coilStroke
+-            val fill = if (active) accent else null
+-            drawRoundedRect(x, 40f, 32f, 38f, 3f, sx, sy, color = color, strokeWidth = 1.5f * sx, fillColor = fill)
+-            // Wire connector stub
+-            drawLine(
+-                color = color,
+-                start = Offset((x + 16f) * sx, 33f * sy),
+-                end = Offset((x + 16f) * sx, 40f * sy),
+-                strokeWidth = 1.5f * sx,
+-            )
+-            // Connector dot
+-            if (active) {
+-                drawCircle(color = color, radius = 3f * sx, center = Offset((x + 16f) * sx, 32f * sy))
+-            } else {
+-                drawCircle(
+-                    color = color,
+-                    radius = 3f * sx,
+-                    center = Offset((x + 16f) * sx, 32f * sy),
+-                    style = Stroke(width = 1f * sx),
+-                )
+-            }
+-        }
+-        // Hoses
+-        val leftHose = Path().apply {
+-            moveTo(30f * sx, 90f * sy)
+-            quadraticTo(18f * sx, 90f * sy, 18f * sx, 110f * sy)
+-            lineTo(18f * sx, 145f * sy)
+-        }
+-        drawPath(
+-            path = leftHose,
+-            color = engineStroke,
+-            style = Stroke(width = 1.5f * sx, cap = StrokeCap.Round, join = StrokeJoin.Round),
+-        )
+-        val rightHose = Path().apply {
+-            moveTo(250f * sx, 100f * sy)
+-            quadraticTo(262f * sx, 100f * sy, 262f * sx, 120f * sy)
+-            lineTo(262f * sx, 145f * sy)
+-        }
+-        drawPath(
+-            path = rightHose,
+-            color = engineStroke,
+-            style = Stroke(width = 1.5f * sx, cap = StrokeCap.Round, join = StrokeJoin.Round),
+-        )
+-        // Battery silhouette (always drawn; terminals tint on highlight).
+-        // Sits in the bottom-left zone clear of the left hose.
+-        drawBattery(
+-            x = 60f, y = 120f, w = 36f, h = 22f, sx = sx, sy = sy,
+-            bodyStroke = engineStroke,
+-            negColor = if (batteryNegHighlighted) accent else muted,
+-            posColor = muted,
+-        )
+-
+-        // Top arrow + COIL label — only when the primary highlight is a coil.
+-        val coilPrimary = (primaryHighlight as? DiagramTarget)?.let {
+-            when (it) {
+-                DiagramTarget.COIL_1 -> 1
+-                DiagramTarget.COIL_2 -> 2
+-                DiagramTarget.COIL_3 -> 3
+-                DiagramTarget.COIL_4 -> 4
+-                else -> null
+-            }
+-        }
+-        if (coilPrimary != null) {
+-            val arrowX = coilXs[coilPrimary - 1] + 16f
+-            drawLine(
+-                color = accent,
+-                start = Offset(arrowX * sx, 15f * sy),
+-                end = Offset(arrowX * sx, 32f * sy),
+-                strokeWidth = 1.5f * sx,
+-            )
+-            val arrowHead = Path().apply {
+-                moveTo((arrowX - 4f) * sx, 28f * sy)
+-                lineTo(arrowX * sx, 36f * sy)
+-                lineTo((arrowX + 4f) * sx, 28f * sy)
+-                close()
+-            }
+-            drawPath(path = arrowHead, color = accent)
+-        }
+-
+-        // Spark plug — inner dot inside cylinder 1's coil well, layered on top
+-        // of the coil rectangle. Always cylinder 1 in the P0301 demo. Smaller
+-        // than the coil fill so a COIL_1 → SPARK_PLUG transition reads as
+-        // the focus moving deeper.
+-        if (sparkPlugHighlighted) {
+-            val plugCenterX = coilXs[0] + 16f
+-            val plugCenterY = 59f  // mid-coil vertically (coil spans y=40 to y=78)
+-            // Outer ghost ring suggesting depth
+-            drawCircle(
+-                color = accent,
+-                radius = 9f * sx,
+-                center = Offset(plugCenterX * sx, plugCenterY * sy),
+-                style = Stroke(width = 1f * sx),
+-            )
+-            // Inner solid dot — the plug itself
+-            drawCircle(
+-                color = accent,
+-                radius = 4.5f * sx,
+-                center = Offset(plugCenterX * sx, plugCenterY * sy),
+-            )
+-        }
+-
+-        // Native text labels
+-        drawIntoCanvas { canvas ->
+-            val titlePaint = Paint().apply {
+-                this.color = accent.toArgb()
+-                this.textSize = 9f * sy
+-                this.textAlign = Paint.Align.CENTER
+-                this.typeface = typeface
+-                this.isAntiAlias = true
+-                this.letterSpacing = 0.06f
+-            }
+-            when {
+-                coilPrimary != null -> {
+-                    val arrowX = coilXs[coilPrimary - 1] + 16f
+-                    canvas.nativeCanvas.drawText(
+-                        "COIL $coilPrimary",
+-                        arrowX * sx,
+-                        11f * sy,
+-                        titlePaint,
+-                    )
+-                }
+-                sparkPlugHighlighted -> {
+-                    val plugLabelX = coilXs[0] + 16f
+-                    // Label below the coil well so the eye drops downward,
+-                    // distinguishing this from the coil label position.
+-                    canvas.nativeCanvas.drawText(
+-                        "PLUG",
+-                        plugLabelX * sx,
+-                        92f * sy,
+-                        titlePaint,
+-                    )
+-                }
+-                batteryNegHighlighted -> {
+-                    canvas.nativeCanvas.drawText(
+-                        "(−)",
+-                        78f * sx,
+-                        115f * sy,
+-                        titlePaint,
+-                    )
+-                }
+-            }
+-            val edgePaint = Paint().apply {
+-                this.color = muted.toArgb()
+-                this.textSize = 8f * sy
+-                this.textAlign = Paint.Align.CENTER
+-                this.typeface = typeface
+-                this.isAntiAlias = true
+-                this.letterSpacing = 0.12f
+-            }
+-            canvas.nativeCanvas.drawText("← FRONT", 130f * sx, 170f * sy, edgePaint)
+-            canvas.nativeCanvas.drawText("CABIN →", 220f * sx, 170f * sy, edgePaint)
+-            // suppress unused-var warning while keeping `frame` available for
+-            // future highlight shapes that need the brighter line color.
+-            @Suppress("UNUSED_VARIABLE")
+-            val unused = frame
+-        }
+-    }
+-}
+-
+-private fun DrawScope.drawBattery(
+-    x: Float,
+-    y: Float,
+-    w: Float,
+-    h: Float,
+-    sx: Float,
+-    sy: Float,
+-    bodyStroke: androidx.compose.ui.graphics.Color,
+-    negColor: androidx.compose.ui.graphics.Color,
+-    posColor: androidx.compose.ui.graphics.Color,
+-) {
+-    drawRoundedRect(x, y, w, h, 2f, sx, sy, color = bodyStroke, strokeWidth = 1f * sx)
+-    val terminalW = 6f
+-    val terminalH = 4f
+-    // Negative on the left, positive on the right — convention matches typical
+-    // top-post automotive batteries.
+-    val negX = x + w * 0.18f
+-    val posX = x + w * 0.66f
+-    val termTopY = y - terminalH
+-    // Negative terminal
+-    drawRoundedRect(
+-        negX, termTopY, terminalW, terminalH, 1f, sx, sy,
+-        color = negColor, fill = true, fillColor = negColor,
+-    )
+-    // Positive terminal
+-    drawRoundedRect(
+-        posX, termTopY, terminalW, terminalH, 1f, sx, sy,
+-        color = posColor, fill = true, fillColor = posColor,
+-    )
+-}
+-
+-private fun DrawScope.drawRoundedRect(
+-    x: Float,
+-    y: Float,
+-    w: Float,
+-    h: Float,
+-    r: Float,
+-    sx: Float,
+-    sy: Float,
+-    color: androidx.compose.ui.graphics.Color,
+-    strokeWidth: Float = 0f,
+-    fill: Boolean = false,
+-    fillColor: androidx.compose.ui.graphics.Color? = null,
+-) {
+-    val topLeft = Offset(x * sx, y * sy)
+-    val sz = Size(w * sx, h * sy)
+-    val cornerRadius = androidx.compose.ui.geometry.CornerRadius(r * sx, r * sy)
+-    if (fill || fillColor != null) {
+-        drawRoundRect(
+-            color = fillColor ?: color,
+-            topLeft = topLeft,
+-            size = sz,
+-            cornerRadius = cornerRadius,
+-        )
+-    }
+-    if (strokeWidth > 0f) {
+-        drawRoundRect(
+-            color = color,
+-            topLeft = topLeft,
+-            size = sz,
+-            cornerRadius = cornerRadius,
+-            style = Stroke(width = strokeWidth),
+-        )
+-    }
+-}
+diff --git a/app/src/main/java/com/example/carcopilot/ui/components/schematic/EngineBaySchematic.kt b/app/src/main/java/com/example/carcopilot/ui/components/schematic/EngineBaySchematic.kt
+new file mode 100644
+index 0000000..9b1b1c2
+--- /dev/null
++++ b/app/src/main/java/com/example/carcopilot/ui/components/schematic/EngineBaySchematic.kt
+@@ -0,0 +1,189 @@
++package com.example.carcopilot.ui.components.schematic
++
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Rect
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Color
++
++/**
++ * Engine-bay schematic — used by P0301 (cylinder misfire) and other ignition
++ * codes. Coordinates lifted verbatim from the original hand-coded
++ * `EngineDiagram.kt` so P0301 renders the same shape after the refactor.
++ *
++ * Viewport is 280×180. Origin is top-left.
++ *
++ * Layout:
++ *   - Engine block outline + valve cover behind four coil rectangles
++ *   - Coils 1..4 across the top at x = 56, 100, 144, 188 (each 32 wide)
++ *   - Wire connector stubs above each coil with a connector dot
++ *   - Left/right cooling hoses arcing off the block
++ *   - Battery silhouette in the bottom-left with two terminals
++ *   - Edge labels "← FRONT" and "CABIN →" at the bottom
++ *
++ * Highlight targets:
++ *   - COIL_1..COIL_4 — accent-fill the coil rectangle + top arrow + label
++ *   - SPARK_PLUG — dot inside cylinder 1's coil well (always cylinder 1
++ *     in the P0301 demo); deliberately smaller so a COIL_1 → SPARK_PLUG
++ *     transition reads as the focus moving deeper, not standing still
++ *   - BATTERY_NEG — accent the negative terminal of the battery
++ */
++
++private val COIL_XS = floatArrayOf(56f, 100f, 144f, 188f)
++private const val COIL_W = 32f
++private const val COIL_H = 38f
++private const val COIL_Y = 40f
++
++private val EngineFrameStroke = SchematicStroke(Color(0xFF3A3A37), widthPx = 1.5f)
++private val ValveCoverStroke = SchematicStroke(Color(0xFF4A4A47), widthPx = 1f)
++private val CoilStroke = SchematicStroke(Color(0xFF4A4A47), widthPx = 1.5f)
++private val ValveCoverFill = Color(0xFF1A1A18)
++
++private val MutedTerminal = Color(0xFF6E6E73) // matches CarCopilotColors.TextFaint
++
++val EngineBaySchematic: SchematicSpec = SchematicSpec(
++    viewport = Size(280f, 180f),
++    shapes = buildList {
++        // Engine block outline (was EngineDiagram.kt:94)
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 30f, top = 55f, right = 250f, bottom = 150f),
++                cornerRadius = 6f,
++                stroke = EngineFrameStroke,
++            )
++        )
++        // Valve cover — fill then stroke (was 96-97)
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 42f, top = 70f, right = 238f, bottom = 110f),
++                cornerRadius = 3f,
++                fill = ValveCoverFill,
++                stroke = ValveCoverStroke,
++            )
++        )
++        // Four coils + wire stubs + connector dots (was 99-124)
++        COIL_XS.forEach { x ->
++            add(
++                SchematicShape.RoundedRect(
++                    rect = Rect(left = x, top = COIL_Y, right = x + COIL_W, bottom = COIL_Y + COIL_H),
++                    cornerRadius = 3f,
++                    stroke = CoilStroke,
++                )
++            )
++            add(
++                SchematicShape.Line(
++                    from = Offset(x + 16f, 33f),
++                    to = Offset(x + 16f, 40f),
++                    stroke = CoilStroke,
++                )
++            )
++            add(
++                SchematicShape.Circle(
++                    center = Offset(x + 16f, 32f),
++                    radius = 3f,
++                    stroke = SchematicStroke(CoilStroke.color, widthPx = 1f),
++                )
++            )
++        }
++        // Left hose (was 126-135)
++        add(
++            SchematicShape.Path(
++                commands = listOf(
++                    PathCommand.MoveTo(Offset(30f, 90f)),
++                    PathCommand.QuadTo(Offset(18f, 90f), Offset(18f, 110f)),
++                    PathCommand.LineTo(Offset(18f, 145f)),
++                ),
++                stroke = SchematicStroke(EngineFrameStroke.color, widthPx = 1.5f, rounded = true),
++            )
++        )
++        // Right hose (was 136-145)
++        add(
++            SchematicShape.Path(
++                commands = listOf(
++                    PathCommand.MoveTo(Offset(250f, 100f)),
++                    PathCommand.QuadTo(Offset(262f, 100f), Offset(262f, 120f)),
++                    PathCommand.LineTo(Offset(262f, 145f)),
++                ),
++                stroke = SchematicStroke(EngineFrameStroke.color, widthPx = 1.5f, rounded = true),
++            )
++        )
++        // Battery body + terminals (was drawBattery 262-291 at x=60, y=120, w=36, h=22)
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 60f, top = 120f, right = 96f, bottom = 142f),
++                cornerRadius = 2f,
++                stroke = SchematicStroke(EngineFrameStroke.color, widthPx = 1f),
++            )
++        )
++        // Positive terminal — sits at x = 60 + 36 * 0.66 ≈ 83.76, w=6, h=4, top y = 116
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 83.76f, top = 116f, right = 89.76f, bottom = 120f),
++                cornerRadius = 1f,
++                fill = MutedTerminal,
++            )
++        )
++        // Negative terminal — sits at x = 60 + 36 * 0.18 ≈ 66.48 (drawn under base art so the
++        // highlighted version draws on top via the BATTERY_NEG region)
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 66.48f, top = 116f, right = 72.48f, bottom = 120f),
++                cornerRadius = 1f,
++                fill = MutedTerminal,
++            )
++        )
++    },
++    regions = buildMap {
++        COIL_XS.forEachIndexed { idx, x ->
++            val cylinder = idx + 1
++            put(
++                "COIL_$cylinder",
++                HighlightRegion(
++                    outline = SchematicShape.RoundedRect(
++                        rect = Rect(
++                            left = x, top = COIL_Y,
++                            right = x + COIL_W, bottom = COIL_Y + COIL_H,
++                        ),
++                        cornerRadius = 3f,
++                        // The renderer's withAccentFill swaps fill+stroke to accent;
++                        // stroke seed kept here so the shape's outline keeps width 1.5
++                        stroke = SchematicStroke(Color.Transparent, widthPx = 1.5f),
++                    ),
++                    label = "COIL $cylinder",
++                    labelAnchor = Offset(x + 16f, 11f),
++                    arrow = ArrowSpec(
++                        from = Offset(x + 16f, 15f),
++                        to = Offset(x + 16f, 32f),
++                    ),
++                ),
++            )
++        }
++        put(
++            "SPARK_PLUG",
++            HighlightRegion(
++                // Mid-coil vertically (coil spans y=40..78 → center y=59)
++                outline = SchematicShape.Circle(
++                    center = Offset(COIL_XS[0] + 16f, 59f),
++                    radius = 4.5f,
++                ),
++                label = "PLUG",
++                labelAnchor = Offset(COIL_XS[0] + 16f, 92f),
++                style = HighlightStyle.AccentDot,
++            ),
++        )
++        put(
++            "BATTERY_NEG",
++            HighlightRegion(
++                outline = SchematicShape.RoundedRect(
++                    rect = Rect(left = 66.48f, top = 116f, right = 72.48f, bottom = 120f),
++                    cornerRadius = 1f,
++                ),
++                label = "(−)",
++                labelAnchor = Offset(78f, 115f),
++            ),
++        )
++    },
++    edgeLabels = listOf(
++        EdgeLabel("← FRONT", Offset(130f, 170f)),
++        EdgeLabel("CABIN →", Offset(220f, 170f)),
++    ),
++)
+diff --git a/app/src/main/java/com/example/carcopilot/ui/components/schematic/FuelSystemSchematic.kt b/app/src/main/java/com/example/carcopilot/ui/components/schematic/FuelSystemSchematic.kt
+new file mode 100644
+index 0000000..e7a4c58
+--- /dev/null
++++ b/app/src/main/java/com/example/carcopilot/ui/components/schematic/FuelSystemSchematic.kt
+@@ -0,0 +1,231 @@
++package com.example.carcopilot.ui.components.schematic
++
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Rect
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Color
++
++/**
++ * Diesel common-rail fuel-system schematic — used by P0087 (fuel rail
++ * pressure too low). Viewport 280×180; origin top-left.
++ *
++ * Flow, left to right:
++ *   TANK → FILTER → PRIMER BULB → HP PUMP → RAIL → injectors → head
++ *
++ * Highlight targets:
++ *   - FUEL_FILTER — the canister; primary focus of Phases 1 & 3
++ *   - PRIMER_BULB — bulb on the line between filter and pump; Phase 4
++ *   - FUEL_RAIL — the horizontal rail bar across the top; verification step
++ *   - BATTERY_NEG — battery in the bottom-left, shared with Phase 1
++ *     "disconnect the negative battery terminal" instruction
++ */
++
++private val FrameStroke = SchematicStroke(Color(0xFF3A3A37), widthPx = 1.5f)
++private val TankFill = Color(0xFF1A1A18)
++private val TankStroke = SchematicStroke(Color(0xFF4A4A47), widthPx = 1f)
++private val LineStroke = SchematicStroke(Color(0xFF4A4A47), widthPx = 1.2f, rounded = true)
++private val PartStroke = SchematicStroke(Color(0xFF4A4A47), widthPx = 1.2f)
++private val MutedTerminal = Color(0xFF6E6E73)
++
++private val FILTER_RECT = Rect(left = 70f, top = 90f, right = 92f, bottom = 122f)
++private const val PRIMER_CX = 112f
++private const val PRIMER_CY = 95f
++private const val PRIMER_R = 5.5f
++private val PUMP_RECT = Rect(left = 130f, top = 85f, right = 160f, bottom = 115f)
++private val RAIL_RECT = Rect(left = 90f, top = 40f, right = 240f, bottom = 50f)
++private val HEAD_RECT = Rect(left = 90f, top = 60f, right = 240f, bottom = 78f)
++
++val FuelSystemSchematic: SchematicSpec = SchematicSpec(
++    viewport = Size(280f, 180f),
++    shapes = buildList {
++        // Tank — left side, a tall pillow-shape
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 20f, top = 95f, right = 60f, bottom = 135f),
++                cornerRadius = 4f,
++                fill = TankFill,
++                stroke = TankStroke,
++            )
++        )
++        // Tank-to-filter feed line
++        add(
++            SchematicShape.Line(
++                from = Offset(60f, 106f),
++                to = Offset(70f, 106f),
++                stroke = LineStroke,
++            )
++        )
++        // Filter canister
++        add(
++            SchematicShape.RoundedRect(
++                rect = FILTER_RECT,
++                cornerRadius = 3f,
++                fill = TankFill,
++                stroke = PartStroke,
++            )
++        )
++        // Filter inlet/outlet stubs (top and bottom) — sells "two fuel lines" cue
++        add(
++            SchematicShape.Line(
++                from = Offset(81f, 86f),
++                to = Offset(81f, 90f),
++                stroke = LineStroke,
++            )
++        )
++        add(
++            SchematicShape.Line(
++                from = Offset(81f, 122f),
++                to = Offset(81f, 126f),
++                stroke = LineStroke,
++            )
++        )
++        // Filter → primer → pump feed line (goes up over the primer bulb)
++        add(
++            SchematicShape.Path(
++                commands = listOf(
++                    PathCommand.MoveTo(Offset(92f, 100f)),
++                    PathCommand.LineTo(Offset(102f, 100f)),
++                    PathCommand.QuadTo(Offset(112f, 100f), Offset(112f, 95f)),
++                ),
++                stroke = LineStroke,
++            )
++        )
++        add(
++            SchematicShape.Path(
++                commands = listOf(
++                    PathCommand.MoveTo(Offset(112f, 95f)),
++                    PathCommand.QuadTo(Offset(112f, 100f), Offset(122f, 100f)),
++                    PathCommand.LineTo(Offset(130f, 100f)),
++                ),
++                stroke = LineStroke,
++            )
++        )
++        // Primer bulb (base art — empty circle; the highlight overrides)
++        add(
++            SchematicShape.Circle(
++                center = Offset(PRIMER_CX, PRIMER_CY),
++                radius = PRIMER_R,
++                fill = TankFill,
++                stroke = PartStroke,
++            )
++        )
++        // HP pump (front-of-engine box)
++        add(
++            SchematicShape.RoundedRect(
++                rect = PUMP_RECT,
++                cornerRadius = 3f,
++                fill = TankFill,
++                stroke = PartStroke,
++            )
++        )
++        // Pump → rail stub (goes up)
++        add(
++            SchematicShape.Line(
++                from = Offset(145f, 85f),
++                to = Offset(145f, 50f),
++                stroke = LineStroke,
++            )
++        )
++        // Fuel rail across the top (the part that holds pressure)
++        add(
++            SchematicShape.RoundedRect(
++                rect = RAIL_RECT,
++                cornerRadius = 3f,
++                fill = TankFill,
++                stroke = PartStroke,
++            )
++        )
++        // Cylinder head outline below the rail
++        add(
++            SchematicShape.RoundedRect(
++                rect = HEAD_RECT,
++                cornerRadius = 4f,
++                stroke = FrameStroke,
++            )
++        )
++        // Four injector stubs from rail → head
++        listOf(110f, 145f, 180f, 215f).forEach { x ->
++            add(
++                SchematicShape.Line(
++                    from = Offset(x, 50f),
++                    to = Offset(x, 60f),
++                    stroke = LineStroke,
++                )
++            )
++            add(
++                SchematicShape.Circle(
++                    center = Offset(x, 55f),
++                    radius = 1.8f,
++                    fill = MutedTerminal,
++                )
++            )
++        }
++        // Battery body + terminals (mirrors EngineBaySchematic for visual continuity)
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 30f, top = 150f, right = 66f, bottom = 172f),
++                cornerRadius = 2f,
++                stroke = SchematicStroke(FrameStroke.color, widthPx = 1f),
++            )
++        )
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 53.76f, top = 146f, right = 59.76f, bottom = 150f),
++                cornerRadius = 1f,
++                fill = MutedTerminal,
++            )
++        )
++        add(
++            SchematicShape.RoundedRect(
++                rect = Rect(left = 36.48f, top = 146f, right = 42.48f, bottom = 150f),
++                cornerRadius = 1f,
++                fill = MutedTerminal,
++            )
++        )
++    },
++    regions = mapOf(
++        "FUEL_FILTER" to HighlightRegion(
++            outline = SchematicShape.RoundedRect(
++                rect = FILTER_RECT,
++                cornerRadius = 3f,
++                stroke = SchematicStroke(Color.Transparent, widthPx = 1.5f),
++            ),
++            label = "FUEL FILTER",
++            labelAnchor = Offset(81f, 138f),
++            arrow = ArrowSpec(
++                from = Offset(81f, 138f - 14f),
++                to = Offset(81f, FILTER_RECT.bottom + 2f),
++            ),
++        ),
++        "PRIMER_BULB" to HighlightRegion(
++            outline = SchematicShape.Circle(
++                center = Offset(PRIMER_CX, PRIMER_CY),
++                radius = PRIMER_R,
++            ),
++            label = "PRIME",
++            labelAnchor = Offset(PRIMER_CX, PRIMER_CY - 11f),
++            style = HighlightStyle.AccentDot,
++        ),
++        "FUEL_RAIL" to HighlightRegion(
++            outline = SchematicShape.RoundedRect(
++                rect = RAIL_RECT,
++                cornerRadius = 3f,
++                stroke = SchematicStroke(Color.Transparent, widthPx = 1.5f),
++            ),
++            label = "34.5 MPa RAIL",
++            labelAnchor = Offset(165f, 32f),
++        ),
++        "BATTERY_NEG" to HighlightRegion(
++            outline = SchematicShape.RoundedRect(
++                rect = Rect(left = 36.48f, top = 146f, right = 42.48f, bottom = 150f),
++                cornerRadius = 1f,
++            ),
++            label = "(−)",
++            labelAnchor = Offset(50f, 145f),
++        ),
++    ),
++    edgeLabels = listOf(
++        EdgeLabel("TANK", Offset(40f, 90f)),
++        EdgeLabel("HP PUMP", Offset(145f, 128f)),
++    ),
++)
+diff --git a/app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicRenderer.kt b/app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicRenderer.kt
+new file mode 100644
+index 0000000..8ee84f3
+--- /dev/null
++++ b/app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicRenderer.kt
+@@ -0,0 +1,310 @@
++package com.example.carcopilot.ui.components.schematic
++
++import android.graphics.Paint
++import android.graphics.Typeface
++import androidx.compose.animation.core.RepeatMode
++import androidx.compose.animation.core.animateFloat
++import androidx.compose.animation.core.infiniteRepeatable
++import androidx.compose.animation.core.rememberInfiniteTransition
++import androidx.compose.animation.core.tween
++import androidx.compose.foundation.Canvas
++import androidx.compose.foundation.layout.aspectRatio
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.geometry.CornerRadius
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.Path as ComposePath
++import androidx.compose.ui.graphics.StrokeCap
++import androidx.compose.ui.graphics.StrokeJoin
++import androidx.compose.ui.graphics.drawscope.DrawScope
++import androidx.compose.ui.graphics.drawscope.Stroke
++import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
++import androidx.compose.ui.graphics.nativeCanvas
++import androidx.compose.ui.graphics.toArgb
++import androidx.compose.ui.platform.LocalContext
++import androidx.core.content.res.ResourcesCompat
++import com.example.carcopilot.R
++import com.example.carcopilot.ui.theme.CarCopilotColors
++
++/**
++ * Renders a [SchematicSpec] inside the dark inset on the walkthrough screen.
++ *
++ * Layering, bottom-up:
++ *   1. Faint background grid — sells the "instrument view" framing.
++ *   2. Inner bezel — a 1px stroke just inside the surface, like an LCD frame.
++ *   3. Base shapes from [SchematicSpec.shapes], in declaration order.
++ *   4. Highlight overlays — one per id in [highlightedIds] that resolves to a
++ *      [HighlightRegion]. Highlight alpha pulses 0.65 → 1.0 over 1.5s with
++ *      RepeatMode.Reverse — same cadence as the loading-page dots
++ *      ([com.example.carcopilot.ui.components.WalkthroughLoadingPage]) so
++ *      the page reads coherently.
++ *   5. Edge labels from [SchematicSpec.edgeLabels] — drawn with the muted
++ *      paint at the bottom of the viewport.
++ *   6. Per-region labels and arrows — drawn last so they sit above geometry.
++ *
++ * The native-canvas text path needs a Typeface; we resolve JetBrains Mono once
++ * via `remember(context)` and reuse the same instance across the two paints.
++ */
++@Composable
++fun SchematicRenderer(
++    spec: SchematicSpec,
++    highlightedIds: Set<String>,
++    modifier: Modifier = Modifier,
++) {
++    val context = LocalContext.current
++    val typeface: Typeface = remember(context) {
++        ResourcesCompat.getFont(context, R.font.jetbrains_mono_regular) ?: Typeface.MONOSPACE
++    }
++    val accent = CarCopilotColors.Accent
++    val muted = CarCopilotColors.TextFaint
++    val grid = Color.White.copy(alpha = 0.05f)
++    val bezel = Color.White.copy(alpha = 0.10f)
++
++    val pulse by rememberInfiniteTransition(label = "schematic-pulse")
++        .animateFloat(
++            initialValue = 0.65f,
++            targetValue = 1.0f,
++            animationSpec = infiniteRepeatable(
++                animation = tween(durationMillis = 1500),
++                repeatMode = RepeatMode.Reverse,
++            ),
++            label = "highlight-alpha",
++        )
++
++    Canvas(
++        modifier = modifier
++            .fillMaxWidth()
++            .aspectRatio(spec.viewport.width / spec.viewport.height),
++    ) {
++        val sx = size.width / spec.viewport.width
++        val sy = size.height / spec.viewport.height
++
++        drawGrid(spec.viewport, sx, sy, grid)
++        drawBezel(spec.viewport, sx, sy, bezel)
++
++        spec.shapes.forEach { shape -> drawShape(shape, sx, sy) }
++
++        val activeRegions = highlightedIds.mapNotNull { id -> spec.regions[id] }
++        activeRegions.forEach { region ->
++            drawHighlight(region, accent.copy(alpha = pulse), sx, sy)
++        }
++
++        drawIntoCanvas { canvas ->
++            val labelPaint = Paint().apply {
++                color = accent.toArgb()
++                textSize = 10f * sy
++                textAlign = Paint.Align.CENTER
++                this.typeface = typeface
++                isAntiAlias = true
++                letterSpacing = 0.06f
++                setShadowLayer(2f * sy, 0f, 0f, Color.Black.toArgb())
++            }
++            val edgePaint = Paint().apply {
++                color = muted.toArgb()
++                textSize = 8f * sy
++                textAlign = Paint.Align.CENTER
++                this.typeface = typeface
++                isAntiAlias = true
++                letterSpacing = 0.12f
++            }
++            spec.edgeLabels.forEach { label ->
++                canvas.nativeCanvas.drawText(
++                    label.text,
++                    label.anchor.x * sx,
++                    label.anchor.y * sy,
++                    edgePaint,
++                )
++            }
++            activeRegions.forEach { region ->
++                canvas.nativeCanvas.drawText(
++                    region.label,
++                    region.labelAnchor.x * sx,
++                    region.labelAnchor.y * sy,
++                    labelPaint,
++                )
++            }
++        }
++    }
++}
++
++private fun DrawScope.drawGrid(viewport: Size, sx: Float, sy: Float, color: Color) {
++    if (viewport.width < 100f || viewport.height < 100f) return
++    val step = 12f
++    val strokeWidth = 0.5f * sx
++    var x = step
++    while (x < viewport.width) {
++        drawLine(
++            color = color,
++            start = Offset(x * sx, 0f),
++            end = Offset(x * sx, viewport.height * sy),
++            strokeWidth = strokeWidth,
++        )
++        x += step
++    }
++    var y = step
++    while (y < viewport.height) {
++        drawLine(
++            color = color,
++            start = Offset(0f, y * sy),
++            end = Offset(viewport.width * sx, y * sy),
++            strokeWidth = strokeWidth,
++        )
++        y += step
++    }
++}
++
++private fun DrawScope.drawBezel(viewport: Size, sx: Float, sy: Float, color: Color) {
++    val inset = 1.5f
++    drawRect(
++        color = color,
++        topLeft = Offset(inset * sx, inset * sy),
++        size = Size(
++            (viewport.width - 2 * inset) * sx,
++            (viewport.height - 2 * inset) * sy,
++        ),
++        style = Stroke(width = 1f * sx),
++    )
++}
++
++private fun DrawScope.drawShape(shape: SchematicShape, sx: Float, sy: Float) {
++    when (shape) {
++        is SchematicShape.RoundedRect -> {
++            val topLeft = Offset(shape.rect.left * sx, shape.rect.top * sy)
++            val sz = Size(shape.rect.width * sx, shape.rect.height * sy)
++            val corner = CornerRadius(shape.cornerRadius * sx, shape.cornerRadius * sy)
++            shape.fill?.let { fill ->
++                drawRoundRect(color = fill, topLeft = topLeft, size = sz, cornerRadius = corner)
++            }
++            shape.stroke?.let { stroke ->
++                drawRoundRect(
++                    color = stroke.color,
++                    topLeft = topLeft,
++                    size = sz,
++                    cornerRadius = corner,
++                    style = Stroke(width = stroke.widthPx * sx),
++                )
++            }
++        }
++        is SchematicShape.Line -> {
++            drawLine(
++                color = shape.stroke.color,
++                start = Offset(shape.from.x * sx, shape.from.y * sy),
++                end = Offset(shape.to.x * sx, shape.to.y * sy),
++                strokeWidth = shape.stroke.widthPx * sx,
++                cap = if (shape.stroke.rounded) StrokeCap.Round else StrokeCap.Butt,
++            )
++        }
++        is SchematicShape.Path -> {
++            val path = composePathFrom(shape.commands, sx, sy)
++            shape.fill?.let { drawPath(path = path, color = it) }
++            shape.stroke?.let { stroke ->
++                drawPath(
++                    path = path,
++                    color = stroke.color,
++                    style = Stroke(
++                        width = stroke.widthPx * sx,
++                        cap = if (stroke.rounded) StrokeCap.Round else StrokeCap.Butt,
++                        join = StrokeJoin.Round,
++                    ),
++                )
++            }
++        }
++        is SchematicShape.Circle -> {
++            val center = Offset(shape.center.x * sx, shape.center.y * sy)
++            val radius = shape.radius * sx
++            shape.fill?.let { drawCircle(color = it, radius = radius, center = center) }
++            shape.stroke?.let { stroke ->
++                drawCircle(
++                    color = stroke.color,
++                    radius = radius,
++                    center = center,
++                    style = Stroke(width = stroke.widthPx * sx),
++                )
++            }
++        }
++    }
++}
++
++private fun composePathFrom(commands: List<PathCommand>, sx: Float, sy: Float): ComposePath {
++    val path = ComposePath()
++    commands.forEach { cmd ->
++        when (cmd) {
++            is PathCommand.MoveTo -> path.moveTo(cmd.to.x * sx, cmd.to.y * sy)
++            is PathCommand.LineTo -> path.lineTo(cmd.to.x * sx, cmd.to.y * sy)
++            is PathCommand.QuadTo -> path.quadraticTo(
++                cmd.control.x * sx, cmd.control.y * sy,
++                cmd.to.x * sx, cmd.to.y * sy,
++            )
++            PathCommand.Close -> path.close()
++        }
++    }
++    return path
++}
++
++private fun DrawScope.drawHighlight(
++    region: HighlightRegion,
++    pulsingAccent: Color,
++    sx: Float,
++    sy: Float,
++) {
++    when (region.style) {
++        HighlightStyle.AccentFill -> {
++            drawShape(region.outline.withAccentFill(pulsingAccent), sx, sy)
++        }
++        HighlightStyle.AccentRing -> {
++            drawShape(region.outline.withAccentStroke(pulsingAccent, widthPx = 1.5f), sx, sy)
++        }
++        HighlightStyle.AccentDot -> {
++            // Solid dot inside a ghost ring — the same layered look the original
++            // EngineDiagram used for the spark plug. The ring telegraphs depth,
++            // the dot is the actual target.
++            (region.outline as? SchematicShape.Circle)?.let { c ->
++                drawCircle(
++                    color = pulsingAccent,
++                    radius = (c.radius + 4.5f) * sx,
++                    center = Offset(c.center.x * sx, c.center.y * sy),
++                    style = Stroke(width = 1f * sx),
++                )
++                drawCircle(
++                    color = pulsingAccent,
++                    radius = c.radius * sx,
++                    center = Offset(c.center.x * sx, c.center.y * sy),
++                )
++            } ?: drawShape(region.outline.withAccentFill(pulsingAccent), sx, sy)
++        }
++    }
++    region.arrow?.let { arrow ->
++        drawLine(
++            color = pulsingAccent,
++            start = Offset(arrow.from.x * sx, arrow.from.y * sy),
++            end = Offset(arrow.to.x * sx, arrow.to.y * sy),
++            strokeWidth = 1.5f * sx,
++        )
++        val head = ComposePath().apply {
++            moveTo((arrow.to.x - arrow.headSize) * sx, (arrow.to.y - arrow.headSize) * sy)
++            lineTo(arrow.to.x * sx, (arrow.to.y + arrow.headSize) * sy)
++            lineTo((arrow.to.x + arrow.headSize) * sx, (arrow.to.y - arrow.headSize) * sy)
++            close()
++        }
++        drawPath(path = head, color = pulsingAccent)
++    }
++}
++
++private fun SchematicShape.withAccentFill(accent: Color): SchematicShape = when (this) {
++    is SchematicShape.RoundedRect -> copy(fill = accent, stroke = stroke?.copy(color = accent))
++    is SchematicShape.Circle -> copy(fill = accent, stroke = stroke?.copy(color = accent))
++    is SchematicShape.Path -> copy(fill = accent, stroke = stroke?.copy(color = accent))
++    is SchematicShape.Line -> copy(stroke = stroke.copy(color = accent))
++}
++
++private fun SchematicShape.withAccentStroke(accent: Color, widthPx: Float): SchematicShape = when (this) {
++    is SchematicShape.RoundedRect -> copy(stroke = SchematicStroke(accent, widthPx), fill = null)
++    is SchematicShape.Circle -> copy(stroke = SchematicStroke(accent, widthPx), fill = null)
++    is SchematicShape.Path -> copy(stroke = SchematicStroke(accent, widthPx), fill = null)
++    is SchematicShape.Line -> copy(stroke = SchematicStroke(accent, widthPx))
++}
+diff --git a/app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicSpec.kt b/app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicSpec.kt
+new file mode 100644
+index 0000000..3a7580e
+--- /dev/null
++++ b/app/src/main/java/com/example/carcopilot/ui/components/schematic/SchematicSpec.kt
+@@ -0,0 +1,106 @@
++package com.example.carcopilot.ui.components.schematic
++
++import androidx.compose.ui.geometry.Offset
++import androidx.compose.ui.geometry.Rect
++import androidx.compose.ui.geometry.Size
++import androidx.compose.ui.graphics.Color
++
++/**
++ * Declarative description of a walkthrough schematic.
++ *
++ * The renderer ([SchematicRenderer]) walks [shapes] in order to draw the base
++ * art, then overlays a [HighlightRegion] for every id in `highlightedIds` that
++ * exists in [regions]. Coordinates are in viewport space; the renderer scales
++ * to the actual Canvas size with `aspectRatio(viewport.width / viewport.height)`.
++ *
++ * Per-DTC layouts live in their own files (see [EngineBaySchematic],
++ * [FuelSystemSchematic]) as pure data. Adding a new DTC family means writing
++ * a new spec — no Canvas math in the consumer.
++ */
++data class SchematicSpec(
++    val viewport: Size,
++    val shapes: List<SchematicShape>,
++    val regions: Map<String, HighlightRegion>,
++    val edgeLabels: List<EdgeLabel> = emptyList(),
++)
++
++/**
++ * A single drawn primitive in viewport space. The renderer dispatches on the
++ * sealed type. Stroke and fill are optional and independent — a shape can be
++ * fill-only (no stroke), stroke-only (no fill), or both.
++ */
++sealed interface SchematicShape {
++    val stroke: SchematicStroke?
++    val fill: Color?
++
++    data class RoundedRect(
++        val rect: Rect,
++        val cornerRadius: Float,
++        override val stroke: SchematicStroke? = null,
++        override val fill: Color? = null,
++    ) : SchematicShape
++
++    data class Line(
++        val from: Offset,
++        val to: Offset,
++        override val stroke: SchematicStroke,
++    ) : SchematicShape {
++        override val fill: Color? get() = null
++    }
++
++    data class Path(
++        val commands: List<PathCommand>,
++        override val stroke: SchematicStroke? = null,
++        override val fill: Color? = null,
++    ) : SchematicShape
++
++    data class Circle(
++        val center: Offset,
++        val radius: Float,
++        override val stroke: SchematicStroke? = null,
++        override val fill: Color? = null,
++    ) : SchematicShape
++}
++
++data class SchematicStroke(
++    val color: Color,
++    val widthPx: Float = 1f,
++    val rounded: Boolean = false,
++)
++
++sealed interface PathCommand {
++    data class MoveTo(val to: Offset) : PathCommand
++    data class LineTo(val to: Offset) : PathCommand
++    data class QuadTo(val control: Offset, val to: Offset) : PathCommand
++    object Close : PathCommand
++}
++
++/**
++ * Overlay drawn when a target id is highlighted. [outline] is the visible
++ * accent shape (a coil rectangle filled, a plug dot, a filter outline).
++ * Optional [arrow] adds a top callout that points at the target, like the
++ * existing "↑ COIL 1" indicator. [label] is rendered at [labelAnchor] using
++ * the schematic's monospace label paint.
++ *
++ * [style] is informational metadata for renderers that want to alter the
++ * visual treatment per region (e.g., a ghost ring around a dot). The current
++ * renderer interprets it as: AccentFill = solid fill, AccentRing = stroke
++ * only, AccentDot = solid fill plus a wider stroke ghost ring.
++ */
++data class HighlightRegion(
++    val outline: SchematicShape,
++    val label: String,
++    val labelAnchor: Offset,
++    val arrow: ArrowSpec? = null,
++    val style: HighlightStyle = HighlightStyle.AccentFill,
++)
++
++enum class HighlightStyle { AccentFill, AccentRing, AccentDot }
++
++data class ArrowSpec(
++    val from: Offset,
++    val to: Offset,
++    val headSize: Float = 4f,
++)
++
++data class EdgeLabel(val text: String, val anchor: Offset)
+-- 
+2.43.0
+
