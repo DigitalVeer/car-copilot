@@ -43,3 +43,6 @@ skills-lock.json
 # HyperFrames demo-video sub-project — stays on disk locally for the
 # primary dev's reference, but the Android repo doesn't track it
 carcopilot-demo/
+
+# On-device smoke-test logcat captures — per-run artifacts, not source
+smoke-*.log
