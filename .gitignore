@@ -32,3 +32,14 @@ venv/
 
 # Review screenshots captured during design polish sessions
 /.screens/
+
+# Agent-session caches (HyperFrames skills cached by the design-skill agents)
+.agents/
+skills-lock.json
+
+# Impeccable design-skill brief — session-local working doc
+.impeccable.md
+
+# HyperFrames demo-video sub-project — stays on disk locally for the
+# primary dev's reference, but the Android repo doesn't track it
+carcopilot-demo/
