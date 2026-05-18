@@ -49,15 +49,24 @@ PORT = 35000
 #   23  Rail pressure kPa ((A*256)+B)*10        28000    → 0A F0
 #   42  Battery V        ((A*256)+B)/1000       12.4V    → 30 70
 
-# All scenarios use the same vehicle so the app's hardcoded VehicleInfo stays consistent.
-_VIN  = "JTDBR32E390123456"
-_NAME = "2009 Toyota Corolla 1ZZ-FE petrol"
+def _vi(year, make, model, mileage, family):
+    """Build a vehicle_info dict. Queried by TcpOBDDataSource via ATVI after handshake."""
+    display = f"{year} {model}"
+    return {"year": year, "make": make, "model": model,
+            "mileage": mileage, "displayName": display, "engineFamily": family}
+
+_COROLLA_VI = _vi(2009, "Toyota",    "Corolla", 187_000, "PETROL")
+_HILUX_VI   = _vi(2008, "Toyota",    "Hilux",   312_000, "DIESEL")
+_L200_VI    = _vi(2006, "Mitsubishi","L200",    245_000, "DIESEL")
 
 SCENARIOS = {
-    # ── P0171 — lean condition, dirty MAF ────────────────────────────────────
+    # ── 2009 Toyota Corolla (petrol) ─────────────────────────────────────────
+
+    # P0171 — lean condition, dirty MAF ──────────────────────────────────────
     "corolla": {
-        "name": f"{_NAME} — P0171 lean condition",
-        "vin":  _VIN,
+        "name": "2009 Toyota Corolla 1ZZ-FE — P0171 lean condition",
+        "vin":  "JTDBR32E390123456",
+        "vehicle_info": _COROLLA_VI,
         "confirmed_dtcs": ["P0171"],
         "pending_dtcs":   [],
         "permanent_dtcs": ["P0171"],
@@ -88,10 +97,11 @@ SCENARIOS = {
         },
     },
 
-    # ── P0301 — cylinder 1 misfire, failed ignition coil ─────────────────────
-    "coil": {
-        "name": f"{_NAME} — P0301 cylinder 1 misfire (coil failure)",
-        "vin":  _VIN,
+    # P0301 — cylinder 1 misfire, failed ignition coil ───────────────────────
+    "corolla_coil": {
+        "name": "2009 Toyota Corolla 1ZZ-FE — P0301 cylinder 1 misfire (coil)",
+        "vin":  "JTDBR32E390123456",
+        "vehicle_info": _COROLLA_VI,
         "confirmed_dtcs": ["P0301"],
         "pending_dtcs":   ["P0301"],
         "permanent_dtcs": ["P0301"],
@@ -122,10 +132,11 @@ SCENARIOS = {
         },
     },
 
-    # ── P0171 + P0101 — lean with MAF circuit fault ───────────────────────────
-    "lean_maf": {
-        "name": f"{_NAME} — P0171+P0101 lean + MAF fault",
-        "vin":  _VIN,
+    # P0171+P0101 — lean with MAF circuit fault ───────────────────────────────
+    "corolla_lean_maf": {
+        "name": "2009 Toyota Corolla 1ZZ-FE — P0171+P0101 lean + MAF fault",
+        "vin":  "JTDBR32E390123456",
+        "vehicle_info": _COROLLA_VI,
         "confirmed_dtcs": ["P0171", "P0101"],
         "pending_dtcs":   ["P0171"],
         "permanent_dtcs": ["P0171"],
@@ -156,10 +167,11 @@ SCENARIOS = {
         },
     },
 
-    # ── P0300 + P0171 — random misfire from fuel starvation ──────────────────
-    "misfire_fuel": {
-        "name": f"{_NAME} — P0300+P0171 random misfire (fuel starvation)",
-        "vin":  _VIN,
+    # P0300+P0171 — random misfire from fuel starvation ──────────────────────
+    "corolla_misfuel": {
+        "name": "2009 Toyota Corolla 1ZZ-FE — P0300+P0171 random misfire (fuel starvation)",
+        "vin":  "JTDBR32E390123456",
+        "vehicle_info": _COROLLA_VI,
         "confirmed_dtcs": ["P0300", "P0171"],
         "pending_dtcs":   ["P0300", "P0171"],
         "permanent_dtcs": ["P0300"],
@@ -190,10 +202,11 @@ SCENARIOS = {
         },
     },
 
-    # ── P0420 — catalyst efficiency below threshold ───────────────────────────
-    "catalyst": {
-        "name": f"{_NAME} — P0420 catalytic converter degraded",
-        "vin":  _VIN,
+    # P0420 — catalyst efficiency below threshold ─────────────────────────────
+    "corolla_cat": {
+        "name": "2009 Toyota Corolla 1ZZ-FE — P0420 catalytic converter degraded",
+        "vin":  "JTDBR32E390123456",
+        "vehicle_info": _COROLLA_VI,
         "confirmed_dtcs": ["P0420"],
         "pending_dtcs":   [],
         "permanent_dtcs": ["P0420"],
@@ -224,10 +237,11 @@ SCENARIOS = {
         },
     },
 
-    # ── P0507 — idle too high, vacuum leak ────────────────────────────────────
-    "idle_high": {
-        "name": f"{_NAME} — P0507 idle too high (vacuum leak)",
-        "vin":  _VIN,
+    # P0507 — idle too high, vacuum leak ─────────────────────────────────────
+    "corolla_idle": {
+        "name": "2009 Toyota Corolla 1ZZ-FE — P0507 idle too high (vacuum leak)",
+        "vin":  "JTDBR32E390123456",
+        "vehicle_info": _COROLLA_VI,
         "confirmed_dtcs": ["P0507"],
         "pending_dtcs":   ["P0507"],
         "permanent_dtcs": [],
@@ -258,25 +272,87 @@ SCENARIOS = {
         },
     },
 
-    # ── P0401 — EGR flow insufficient ────────────────────────────────────────
-    "egr": {
-        "name": f"{_NAME} — P0401 EGR flow insufficient",
-        "vin":  _VIN,
+    # ── 2008 Toyota Hilux 2KD-FTV (diesel) ───────────────────────────────────
+
+    # P0087+P1229 — fuel rail pressure low + SCV fault ────────────────────────
+    "hilux_fuel": {
+        "name": "2008 Toyota Hilux 2KD-FTV diesel — P0087+P1229 fuel rail low",
+        "vin":  "MR0HZ3CDX00123456",
+        "vehicle_info": _HILUX_VI,
+        "confirmed_dtcs": ["P0087", "P1229"],
+        "pending_dtcs":   ["P0087"],
+        "permanent_dtcs": ["P0087"],
+        "pids": {
+            "0C": "0B B8",   # RPM 750
+            "05": "7D",      # Coolant 85°C
+            "04": "40",      # Load 25%
+            "0D": "00",      # Speed 0
+            "11": "1A",      # Throttle 10%
+            "0F": "3F",      # IAT 23°C
+            "23": "0A F0",   # Fuel rail 28,000 kPa (low; target ~34,500)
+            "42": "30 D4",   # Battery 12.5V
+        },
+        "freeze_frame": {
+            "dtc": "P0087",
+            "pids": {
+                "0C": "0B B8",   # RPM 750
+                "05": "75",      # Coolant 77°C (cold start — fault set early)
+                "04": "4C",      # Load 30%
+                "0D": "00",
+                "23": "09 5A",   # Rail pressure 23,940 kPa (very low at fault set)
+            },
+        },
+    },
+
+    # P0671+P0672 — glow plug fault (cylinders 1 and 2) ──────────────────────
+    "hilux_glow": {
+        "name": "2008 Toyota Hilux 2KD-FTV diesel — P0671+P0672 glow plug fault",
+        "vin":  "MR0HZ3CDX00123456",
+        "vehicle_info": _HILUX_VI,
+        "confirmed_dtcs": ["P0671", "P0672"],
+        "pending_dtcs":   ["P0671"],
+        "permanent_dtcs": [],
+        "pids": {
+            "0C": "0B 40",   # RPM 720 (rough cold-start idle)
+            "05": "4D",      # Coolant 37°C (cold — glow plugs most critical here)
+            "04": "30",      # Load 19%
+            "0D": "00",      # Speed 0
+            "11": "1A",      # Throttle 10%
+            "0F": "38",      # IAT 16°C (cold ambient)
+            "23": "0D 48",   # Fuel rail 34,000 kPa (normal — pressure isn't the issue)
+            "42": "2F A8",   # Battery 12.2V (slightly low from hard starting)
+        },
+        "freeze_frame": {
+            "dtc": "P0671",
+            "pids": {
+                "0C": "0B 40",   # RPM 720
+                "05": "33",      # Coolant 11°C (very cold at fault set)
+                "04": "45",      # Load 27%
+                "0D": "00",
+                "23": "0C 1C",   # Rail 31,000 kPa
+                "42": "2E E0",   # Battery 12.0V (low from hard start)
+            },
+        },
+    },
+
+    # ── 2006 Mitsubishi L200 2.5 DiD (diesel) ────────────────────────────────
+
+    # P0401 — EGR flow insufficient ───────────────────────────────────────────
+    "l200_egr": {
+        "name": "2006 Mitsubishi L200 2.5 DiD diesel — P0401 EGR flow insufficient",
+        "vin":  "MMBJNK4706D123456",
+        "vehicle_info": _L200_VI,
         "confirmed_dtcs": ["P0401"],
         "pending_dtcs":   [],
         "permanent_dtcs": ["P0401"],
         "pids": {
             "0C": "0C 08",   # RPM 770
-            "05": "84",      # Coolant 92°C (slightly high — no EGR cooling combustion)
+            "05": "84",      # Coolant 92°C (slightly high — EGR not cooling combustion)
             "04": "30",      # Load 19%
             "0D": "00",      # Speed 0
-            "11": "20",      # Throttle 13%
+            "11": "1A",      # Throttle 10%
             "0F": "41",      # IAT 25°C
-            "10": "01 18",   # MAF 2.80 g/s
-            "06": "89",      # STFT B1 +7%
-            "07": "8C",      # LTFT B1 +9%
-            "14": "4C FF",   # O2 S1 0.38V
-            "15": "78 FF",   # O2 S2 0.60V
+            "23": "0E 74",   # Fuel rail 37,000 kPa (normal)
             "42": "30 D4",   # Battery 12.5V
         },
         "freeze_frame": {
@@ -284,10 +360,39 @@ SCENARIOS = {
             "pids": {
                 "0C": "0C 08",   # RPM 770
                 "05": "84",      # Coolant 92°C
-                "04": "30",      # Load 19%
+                "04": "3D",      # Load 24%
                 "0D": "00",
-                "10": "01 18",   # MAF 2.80 g/s
-                "07": "8C",      # LTFT +9%
+                "23": "0E 74",   # Rail 37,000 kPa
+            },
+        },
+    },
+
+    # P0087 — fuel rail pressure low ──────────────────────────────────────────
+    "l200_fuel": {
+        "name": "2006 Mitsubishi L200 2.5 DiD diesel — P0087 fuel rail pressure low",
+        "vin":  "MMBJNK4706D123456",
+        "vehicle_info": _L200_VI,
+        "confirmed_dtcs": ["P0087"],
+        "pending_dtcs":   ["P0087"],
+        "permanent_dtcs": ["P0087"],
+        "pids": {
+            "0C": "0B B8",   # RPM 750
+            "05": "7D",      # Coolant 85°C
+            "04": "38",      # Load 22%
+            "0D": "00",      # Speed 0
+            "11": "1A",      # Throttle 10%
+            "0F": "41",      # IAT 25°C
+            "23": "0A 28",   # Fuel rail 26,000 kPa (low — more severe than Hilux)
+            "42": "30 D4",   # Battery 12.5V
+        },
+        "freeze_frame": {
+            "dtc": "P0087",
+            "pids": {
+                "0C": "0B B8",   # RPM 750
+                "05": "7A",      # Coolant 82°C
+                "04": "4C",      # Load 30%
+                "0D": "00",
+                "23": "08 FC",   # Rail 23,000 kPa (very low at fault set)
             },
         },
     },
@@ -436,6 +541,13 @@ class ELM327Session:
             self.echo = True
             self.headers = False
             self.send("ELM327 v1.5")
+        elif at == "VI":
+            # Non-standard: returns vehicle_info JSON so TcpOBDDataSource can
+            # populate VehicleInfo/EngineFamily dynamically. Real ELM327
+            # adapters return "?" — TcpOBDDataSource falls back to its
+            # constructor values when parsing fails.
+            info = self.scenario.get("vehicle_info")
+            self.send(json.dumps(info) if info else "?")
         elif at == "E0":
             self.echo = False
             self.send("OK")
@@ -494,21 +606,21 @@ class ELM327Session:
 def _tui(stdscr, current_scenario, scenarios, obd_port):
     curses.curs_set(0)
     curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_GREEN,  -1)  # active scenario
+    curses.init_pair(1, curses.COLOR_GREEN,  -1)              # active scenario
     curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)  # cursor row
 
     keys = list(scenarios.keys())
     cursor = 0
+    scroll = 0   # index of first visible scenario
 
     while True:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
 
-        # Left panel is 24 chars wide; right panel gets the rest.
-        lw = 24
-        rx = lw + 1   # right panel x start
+        lw = 24          # left panel width
+        rx = lw + 1      # right panel x start
 
-        active_key = next((k for k, v in scenarios.items() if v is current_scenario[0]), None)
+        active_key   = next((k for k, v in scenarios.items() if v is current_scenario[0]), None)
         selected_key = keys[cursor]
 
         # ── left panel ──────────────────────────────────────────────────────
@@ -516,38 +628,49 @@ def _tui(stdscr, current_scenario, scenarios, obd_port):
         _add(stdscr, 1, 0, f"port {obd_port}", curses.A_DIM)
         _add(stdscr, 2, 0, "─" * lw)
 
-        for i, key in enumerate(keys):
-            s = scenarios[key]
-            is_cursor = i == cursor
-            is_active = key == active_key
-            row = 3 + i * 3
+        # Visible window — 2 rows per scenario (label + dtcs)
+        with _conn_lock: n = _conn_count[0]
+        conn_line = f" ● app connected" if n > 0 else " ○ waiting for app"
+        conn_attr = curses.color_pair(1) if n > 0 else curses.A_DIM
+        bot = h - 6
+        max_vis = max(1, (bot - 3) // 2)
 
-            mark  = "●" if is_active else "○"
+        # Keep cursor in view
+        if cursor < scroll:
+            scroll = cursor
+        elif cursor >= scroll + max_vis:
+            scroll = cursor - max_vis + 1
+
+        # Scroll arrows
+        if scroll > 0:
+            _add(stdscr, 2, lw - 2, "↑", curses.A_DIM)
+        if scroll + max_vis < len(keys):
+            _add(stdscr, bot - 1, lw - 2, "↓", curses.A_DIM)
+
+        for vi, ai in enumerate(range(scroll, min(len(keys), scroll + max_vis))):
+            key = keys[ai]
+            s   = scenarios[key]
+            row = 3 + vi * 2
+            mark  = "●" if key == active_key else "○"
             label = f" {mark} {key}"
             dtcs  = " ".join(s["confirmed_dtcs"]) or "—"
 
-            if is_cursor:
+            if ai == cursor:
                 _add(stdscr, row,     0, label.ljust(lw), curses.color_pair(2))
                 _add(stdscr, row + 1, 2, dtcs[:lw - 2],  curses.color_pair(2))
-            elif is_active:
+            elif key == active_key:
                 _add(stdscr, row,     0, label, curses.color_pair(1) | curses.A_BOLD)
                 _add(stdscr, row + 1, 2, dtcs[:lw - 2], curses.color_pair(1))
             else:
                 _add(stdscr, row,     0, label)
                 _add(stdscr, row + 1, 2, dtcs[:lw - 2], curses.A_DIM)
 
-        with _conn_lock:
-            n = _conn_count[0]
-        conn_line = f" ● app connected" if n > 0 else " ○ waiting for app"
-        conn_attr = curses.color_pair(1) if n > 0 else curses.A_DIM
-
-        bot = h - 6
         _add(stdscr, bot,     0, "─" * lw)
         _add(stdscr, bot + 1, 0, conn_line, conn_attr)
         _add(stdscr, bot + 2, 0, "─" * lw)
-        _add(stdscr, bot + 3, 0, " ↑↓  navigate",  curses.A_DIM)
-        _add(stdscr, bot + 4, 0, " ↵   activate",  curses.A_DIM)
-        _add(stdscr, bot + 5, 0, " q   quit",      curses.A_DIM)
+        _add(stdscr, bot + 3, 0, " ↑↓  navigate", curses.A_DIM)
+        _add(stdscr, bot + 4, 0, " ↵   activate", curses.A_DIM)
+        _add(stdscr, bot + 5, 0, " q   quit",     curses.A_DIM)
 
         # Vertical divider
         for row in range(h):

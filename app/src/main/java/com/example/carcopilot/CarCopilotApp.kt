@@ -102,11 +102,14 @@ class CarCopilotApp : Application() {
     }
 
     private fun updateIfChanged(snapshot: OBDSnapshot, dtcTable: DTCTable) {
-        val incomingCode = snapshot.dtcs.first().code
-        if (_issueState.value?.dtcs?.firstOrNull()?.code == incomingCode) return
+        val incomingCode    = snapshot.dtcs.first().code
+        val incomingVehicle = snapshot.vehicle.displayName
+        val current = _issueState.value
+        if (current?.dtcs?.firstOrNull()?.code == incomingCode &&
+            current.vehicle.displayName == incomingVehicle) return
         _issueState.value = IssueBuilder.build(snapshot, dtcTable)
         _classificationState.value = RulesEngine.classify(snapshot)
-        Log.i(TAG, "scenario updated → $incomingCode")
+        Log.i(TAG, "scenario updated → $incomingCode ($incomingVehicle)")
     }
 
     companion object {

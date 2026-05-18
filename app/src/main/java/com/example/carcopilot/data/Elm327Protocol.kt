@@ -69,6 +69,11 @@ internal val DTC_DESCRIPTIONS = mapOf(
     "P0401" to "EGR flow insufficient",
     "P0420" to "Catalyst efficiency below threshold (Bank 1)",
     "P0507" to "Idle control system RPM too high",
+    "P0670" to "Glow plug module control circuit",
+    "P0671" to "Cylinder 1 glow plug circuit",
+    "P0672" to "Cylinder 2 glow plug circuit",
+    "P0673" to "Cylinder 3 glow plug circuit",
+    "P0674" to "Cylinder 4 glow plug circuit",
 )
 
 // ── PID decoding ──────────────────────────────────────────────────────────────

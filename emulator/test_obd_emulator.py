@@ -211,7 +211,7 @@ class EncodeVinResponseTest(unittest.TestCase):
 class ScenarioInvariantsTest(unittest.TestCase):
     """Catches regressions in the SCENARIOS dict shape."""
 
-    REQUIRED_KEYS = ("name", "vin", "confirmed_dtcs", "pending_dtcs",
+    REQUIRED_KEYS = ("name", "vin", "vehicle_info", "confirmed_dtcs", "pending_dtcs",
                      "permanent_dtcs", "pids", "freeze_frame")
 
     def test_all_scenarios_have_required_keys(self):
@@ -263,20 +263,24 @@ class ScenarioInvariantsTest(unittest.TestCase):
                     )
                     int(tok, 16)  # raises ValueError if not hex
 
-    def test_coil_scenario_emits_p0301(self):
-        self.assertIn("P0301", emu.SCENARIOS["coil"]["confirmed_dtcs"])
+    def test_corolla_coil_emits_p0301(self):
+        self.assertIn("P0301", emu.SCENARIOS["corolla_coil"]["confirmed_dtcs"])
 
-    def test_all_scenarios_same_vehicle(self):
-        # All scenarios use the same car so the app's hardcoded VehicleInfo stays consistent.
-        vins = {s["vin"] for s in emu.SCENARIOS.values()}
-        self.assertEqual(len(vins), 1, f"Expected one VIN across all scenarios, got: {vins}")
-
-    def test_multi_code_scenarios_have_primary_in_freeze_frame(self):
-        # freeze_frame.dtc must be one the scenario actually confirms.
+    def test_vehicle_info_has_required_fields(self):
+        required = ("year", "make", "model", "mileage", "displayName", "engineFamily")
         for key, s in emu.SCENARIOS.items():
-            ff_dtc = s["freeze_frame"]["dtc"]
-            self.assertIn(ff_dtc, s["confirmed_dtcs"],
-                          f"{key}: freeze_frame.dtc {ff_dtc!r} not in confirmed_dtcs")
+            info = s["vehicle_info"]
+            for field in required:
+                self.assertIn(field, info,
+                              f"scenario {key!r}: vehicle_info missing {field!r}")
+            self.assertIn(info["engineFamily"], ("PETROL", "DIESEL", "UNKNOWN"),
+                          f"scenario {key!r}: unknown engineFamily {info['engineFamily']!r}")
+
+    def test_diesel_scenarios_have_diesel_engine_family(self):
+        diesel_keys = ("hilux_fuel", "hilux_glow", "l200_egr", "l200_fuel")
+        for key in diesel_keys:
+            self.assertEqual(emu.SCENARIOS[key]["vehicle_info"]["engineFamily"], "DIESEL",
+                             f"{key} should be DIESEL")
 
     def test_corolla_is_default_scenario(self):
         # main()'s argparse default is "corolla" — protect that contract.
@@ -332,7 +336,7 @@ class EmulatorEndToEndTest(unittest.TestCase):
         cls.port = _free_port()
         cls.stop = threading.Event()
         cls.thread = threading.Thread(
-            target=_run_server, args=("coil", cls.port, cls.stop), daemon=True,
+            target=_run_server, args=("corolla_coil", cls.port, cls.stop), daemon=True,
         )
         cls.thread.start()
         # Wait briefly for the listener to be ready.

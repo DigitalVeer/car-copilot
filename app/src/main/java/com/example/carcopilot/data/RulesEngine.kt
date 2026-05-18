@@ -24,14 +24,16 @@ object RulesEngine {
     fun classify(snapshot: OBDSnapshot): Classification {
         val code = snapshot.dtcs.firstOrNull()?.code ?: return noSignal()
         val readings = snapshot.liveReadings.associateBy { it.key }
-        return when {
-            code == "P0087" || code == "P1229"  -> classifyFuelRail(code, readings)
-            code == "P0171"                     -> classifyLean(readings)
-            code == "P0300"                     -> classifyRandomMisfire(readings)
-            code.matches(Regex("P030[1-8]"))    -> classifyMisfire(code, readings)
-            code == "P0507"                     -> classifyIdleHigh(readings)
-            else                                -> noSignal(code)
+        val result = when {
+            code == "P0087" || code == "P1229"       -> classifyFuelRail(code, readings)
+            code == "P0171"                           -> classifyLean(readings)
+            code == "P0300"                           -> classifyRandomMisfire(readings)
+            code.matches(Regex("P030[1-8]"))          -> classifyMisfire(code, readings)
+            code == "P0507"                           -> classifyIdleHigh(readings)
+            code.matches(Regex("P067[0-9]"))          -> classifyGlowPlug(code, readings)
+            else                                      -> noSignal(code)
         }
+        return result.copy(engineFamily = snapshot.engineFamily)
     }
 
     private fun classifyFuelRail(
@@ -232,6 +234,40 @@ object RulesEngine {
 
         return Classification(
             primaryDtcCode = "P0507",
+            severity = Severity.warning,
+            route = Route.diy,
+            confidence = confidence,
+            likelyCause = cause,
+            supportingSignals = signals,
+        )
+    }
+
+    private fun classifyGlowPlug(code: String, readings: Map<String, LiveReading>): Classification {
+        val coolant = readings["Coolant temperature"]?.value?.toDoubleOrNull()
+        val battery = readings["Battery voltage"]?.value?.toDoubleOrNull()
+        val signals = mutableListOf<String>()
+
+        val confidence: Confidence
+        val cause: String
+
+        when {
+            coolant != null && coolant < 50 -> {
+                signals += "Coolant at ${coolant.toInt()}°C — cold start conditions where glow plugs are critical for ignition"
+                if (battery != null && battery < 12.3) {
+                    signals += "Battery at ${battery}V — lower than normal, consistent with the engine working hard to start without proper pre-heating"
+                }
+                confidence = Confidence.HIGH
+                cause = "failed glow plug — the cylinder isn't pre-heating before injection, making cold starts difficult or impossible"
+            }
+            else -> {
+                if (coolant != null) signals += "Coolant at ${coolant.toInt()}°C"
+                confidence = Confidence.MEDIUM
+                cause = "glow plug circuit fault — cold starting will be unreliable, especially in cool weather"
+            }
+        }
+
+        return Classification(
+            primaryDtcCode = code,
             severity = Severity.warning,
             route = Route.diy,
             confidence = confidence,
