@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.example.carcopilot.ui.theme.CarCopilotColors
@@ -36,41 +37,67 @@ sealed interface TopBarLeft {
 
 @Composable
 fun TopBar(left: TopBarLeft, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 16.dp)
-            .defaultMinSize(minHeight = 42.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        when (left) {
-            is TopBarLeft.Brand -> BrandMark(vehicleSubtitle = left.vehicleSubtitle)
-            is TopBarLeft.Back -> BackButton(label = left.label, onBack = left.onBack)
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 18.dp)
+                .defaultMinSize(minHeight = 42.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            when (left) {
+                is TopBarLeft.Brand -> BrandMark(vehicleSubtitle = left.vehicleSubtitle)
+                is TopBarLeft.Back -> BackButton(label = left.label, onBack = left.onBack)
+            }
         }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(CarCopilotColors.Line),
+        )
     }
 }
 
 @Composable
 private fun BrandMark(vehicleSubtitle: String) {
-    Column(verticalArrangement = Arrangement.Center) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = "CAR", style = CarCopilotTypography.Brand, color = CarCopilotColors.Text)
-            Spacer(Modifier.width(2.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "CAR",
+                    style = CarCopilotTypography.Brand,
+                    color = CarCopilotColors.Text,
+                )
+                Box(
+                    modifier = Modifier
+                        .size(5.5.dp)
+                        .clip(CircleShape)
+                        .background(CarCopilotColors.Accent),
+                )
+                Text(
+                    text = "COPILOT",
+                    style = CarCopilotTypography.Brand,
+                    color = CarCopilotColors.Text,
+                )
+            }
             Box(
                 modifier = Modifier
-                    .size(4.dp)
-                    .clip(CircleShape)
-                    .background(CarCopilotColors.Accent),
+                    .width(28.dp)
+                    .height(1.5.dp)
+                    .background(CarCopilotColors.Accent.copy(alpha = 0.4f)),
             )
-            Spacer(Modifier.width(2.dp))
-            Text(text = "COPILOT", style = CarCopilotTypography.Brand, color = CarCopilotColors.Text)
         }
-        Spacer(Modifier.height(3.dp))
         Text(
             text = vehicleSubtitle,
             style = CarCopilotTypography.VehicleSubtitle,
             color = CarCopilotColors.TextMute,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

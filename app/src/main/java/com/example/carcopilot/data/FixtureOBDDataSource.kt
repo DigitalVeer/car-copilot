@@ -23,7 +23,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * Only consulted on FIXTURE builds — EMULATOR / BLUETOOTH paths use their
  * own data sources and ignore this constant.
  */
-private const val ACTIVE_FIXTURE = "misfire.json"
+private const val ACTIVE_FIXTURE = "hilux_fuel_rail.json"
 
 /**
  * Fixture-backed [OBDDataSource]. Reads the fixture named by

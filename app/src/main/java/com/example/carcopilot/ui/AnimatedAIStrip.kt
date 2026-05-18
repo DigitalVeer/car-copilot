@@ -195,13 +195,13 @@ private fun ResolvedBody(state: SynthesisState) {
             color = CarCopilotColors.Text,
         )
         is SynthesisState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
+            ColoredText(
                 text = state.synthesis,
                 style = CarCopilotTypography.AiBody,
                 color = CarCopilotColors.Text,
             )
             state.goodNews?.let { news ->
-                Text(
+                ColoredText(
                     text = news,
                     style = CarCopilotTypography.AiBody,
                     color = CarCopilotColors.Text,

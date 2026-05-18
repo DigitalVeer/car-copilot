@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.example.carcopilot.model.FALLBACK_GOOD_NEWS_MISFIRE
 import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
 import com.example.carcopilot.model.Issue
-import com.example.carcopilot.ui.components.AlsoSection
+import com.example.carcopilot.ui.components.ExpandableAlsoSection
 import com.example.carcopilot.ui.components.BottomTabBar
 import com.example.carcopilot.ui.components.IssueCard
 import com.example.carcopilot.ui.components.Tab
@@ -85,7 +85,7 @@ fun HomeScreen(
                 onClick = onIssueClick,
             )
             Spacer(Modifier.height(24.dp))
-            AlsoSection(
+            ExpandableAlsoSection(
                 items = listOf(
                     "Tighten gas cap next time you stop",
                     "Front-left tire low at 22 PSI",
