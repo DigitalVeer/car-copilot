@@ -1,6 +1,6 @@
 # CAR·COPILOT — Android setup
 
-CAR·COPILOT is an on-device car diagnostic copilot: a two-screen Android demo that takes a car's OBD-II fault data, runs Gemma 4 E4B locally via LiteRT-LM, and streams a friend-on-the-phone explanation of what's wrong and what to do about it. No cloud calls, no location services, no telemetry. The full design context lives in `CLAUDE.md` and `reference/`; this file just gets you to a working APK.
+CAR·COPILOT is an on-device car diagnostic copilot: a five-screen Android app that takes a car's OBD-II fault data, runs Gemma 4 E4B locally via LiteRT-LM, and streams a friend-on-the-phone explanation of what's wrong and what to do about it. No cloud calls, no location services, no telemetry. The full design context lives in `CLAUDE.md` and `reference/`; this file just gets you to a working APK.
 
 ## Prerequisites
 

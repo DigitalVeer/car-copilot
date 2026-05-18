@@ -4,13 +4,14 @@
 
 | Python file | Android counterpart |
 |---|---|
-| `schema.py` | `app/src/main/java/com/example/carcopilot/model/Schema.kt` |
-| `dtc_table.py` | `app/src/main/java/com/example/carcopilot/data/DTCTable.kt` |
-| `classifier.py` | `app/src/main/java/com/example/carcopilot/data/IssueBuilder.kt` |
-| `overrides.py` | not ported — live-data severity overrides are not yet a feature on Android |
-| `obd_source.py` | `app/src/main/java/com/example/carcopilot/data/OBDDataSource.kt` (+ `FixtureOBDDataSource.kt`) |
-| `pipeline.py` | the Compose `LaunchedEffect` collect blocks in `IssueScreen` / `MechanicDraftScreen` / `HistoryScreen` |
-| `gemma_adapter.py` | `app/src/main/java/com/example/carcopilot/inference/GemmaService.kt` (+ `PromptBuilder.kt`) |
-| `fallback.py` | `app/src/main/java/com/example/carcopilot/model/Fallbacks.kt` (+ `DTCTable` `walkthroughSteps` / `mechanicDraft`) |
+| `schema.py` | `model/Schema.kt` |
+| `dtc_table.py` | `data/DTCTable.kt` (deep) + `assets/dtc_codes.json` via `ThinDtcLoader` (thin, 256 codes) |
+| `classifier.py` | `data/IssueBuilder.kt` (table-driven) + `data/RulesEngine.kt` (deterministic supporting signals) |
+| `overrides.py` | not ported — live-data severity overrides not yet a feature on Android |
+| `obd_source.py` | `data/OBDDataSource.kt` + impls: `FixtureOBDDataSource.kt`, `TcpOBDDataSource.kt`, `BluetoothOBDDataSource.kt` (shared `Elm327Protocol.kt`) |
+| `pipeline.py` | the Compose `LaunchedEffect` collect blocks in `IssueScreen` / `WalkthroughScreen` / `MechanicDraftScreen` / `HistoryScreen` |
+| `gemma_adapter.py` | `inference/GemmaService.kt` (streaming + multiplexing) + `inference/PromptBuilder.kt` (template fill + RAG injection) |
+| `fallback.py` | `model/Fallbacks.kt` (per-DTC map + `synthesizeFromClassification`) + `DTCTable` per-entry `walkthroughSteps` / `mechanicDraft` / `procedureSpecs` |
+| (none) | `data/RagStore.kt` — new Android-side feature; not in the Python reference |
 
 When the Android code's behavior is unclear and you want to see what the original shape looked like, this is where to look. Do not modify these files expecting the change to affect the Android app.

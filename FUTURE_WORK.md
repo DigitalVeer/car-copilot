@@ -69,31 +69,32 @@ LiteRT-LM 0.11.0 rejects a second `createConversation` while another session is 
 
 ### RAG-backed DTC table
 
-Surfaced from Will's `will/dev` branch alongside the `VehicleState` schema work that landed in Phase-12-prep. Will prototyped a JSON-asset DTC catalogue at `assets/rag/dtc_common.json` with ~15 scenarios, looked up at runtime instead of compiled into `DTCTable.DEFAULT`. Today's in-code table is fine because we have one entry (P0301); the moment we add a second the linear-growth comment in `DTCTable.kt` starts to bite. JSON-on-disk also opens the door to a vector-retrieval layer for fuzzy matches when an unknown DTC arrives. Worth picking up once the table has real breadth.
+**Two related features shipped, one still open.** Will's branch landed two artifacts:
+
+- `assets/rag/dtc_context.json` — 4 retrieval documents (P0087, P0171, P0301-4, plus an always-applicable "general developing-market" doc) consumed by `data/RagStore.kt` and injected into the synthesis prompt's `{rag_context}` field.
+- `assets/dtc_codes.json` — 256-entry thin DTC catalog loaded at startup via `ThinDtcLoader` and merged into `DTCTable.DEFAULT.withThin(...)`. Deep entries always win on conflict so curated data isn't overridden.
+
+Still open: vector retrieval. Both stores are today exact-match by DTC code. Fuzzy match for unknown codes, semantic similarity across vehicle/symptom strings, and embeddings over the thin catalog are all future-work.
 
 ### Per-DTC fallback synthesis on HomeScreen
 
-`model/Fallbacks.kt:8-9` hardcodes `FALLBACK_SYNTHESIS_MISFIRE` as a P0301-specific string used by HomeScreen's AI strip. HomeScreen does not stream from Gemma (live streaming runs in IssueScreen only), so it always renders this canned text.
+**Partially resolved** in `a2095c5` — `model/Fallbacks.kt` now carries a per-DTC `FALLBACK_SYNTHESIS` + `FALLBACK_GOOD_NEWS` map covering 16 codes, plus `synthesizeFromClassification()` which produces a data-driven synthesis from `Classification.supportingSignals` when Gemma is unavailable. Lookup happens via `fallbackSynthesisFor(code)` / `fallbackGoodNewsFor(code)`.
 
-When the DTC table contained only P0301 this was correct; the P0171 entry added in `dc6d05a` exposed the mismatch — a P0171 Issue correctly renders P0171 specifics in the card, but the AI strip above says "Cylinder 1 keeps misfiring."
-
-Path forward: either (a) make HomeScreen a fourth live Gemma surface (adds latency to a screen that should feel fast), (b) move the canned fallback into `DTCTable` as a per-entry field, or (c) hide the AI strip on HomeScreen and run synthesis only on IssueScreen entry. (b) is the cheapest fix and aligns with how `walkthroughSteps` and `mechanicDraft` already live on `DTCEntry`.
+Still open: HomeScreen itself still imports `FALLBACK_SYNTHESIS_MISFIRE` directly (the misfire-specific constant), so a P0171 issue on Home still renders the misfire text. The lookup helpers exist — Home just needs to call them with `issue.dtcs.firstOrNull()?.code`. One-line fix when picked up.
 
 ## Hardware path (BLE OBD)
 
 ### Python TCP OBD emulator over WiFi
 
-Will's idea — a small Python server that speaks ELM327 over a TCP socket, with the Android app connecting via WiFi instead of Bluetooth. Decouples the future `BluetoothOBDDataSource` from dongle+car availability: you can develop and CI-test the transport against the emulator on a laptop, then swap the underlying socket for BLE. Also a useful Plan B for car-test sessions where the real hardware turns out to be finicky on the day. Aligns with the `DataSource.EMULATOR` value already in the schema (`data/DataSource.kt`).
-
-The emulator itself landed in commit `77db981` and lives at `emulator/obd_emulator.py` with scenarios and protocol coverage documented in `emulator/README.md`. A follow-up pass closed three gaps a standalone verification surfaced: Mode 01 supported-PIDs bitmaps (`0100` / `0120` / `0140`) are now computed per scenario; Mode 09 PID 02 (VIN) is wired up in ELM327 multi-line format with a per-scenario 17-char VIN; and a `misfire` scenario emits P0301 plus misfire-shaped live readings, matching `app/src/main/assets/misfire.json` end-to-end. What's still open is the Android-side transport — a `TcpEmulatorOBDDataSource` (or similar) implementing the `OBDDataSource` interface against the emulator socket. That wiring is Phase 12 work and shares its structural shape with the BLE implementation below.
+**Shipped.** The emulator (`emulator/obd_emulator.py`) is wired to the Android side via `data/TcpOBDDataSource.kt`, selected at build time with `-PdataSource=EMULATOR`. End-to-end exercise pending a longer Pixel 9 session against the corolla and hilux scenarios. Plan B for car-test sessions where real hardware turns out to be finicky.
 
 ### BluetoothOBDDataSource
 
 The `OBDDataSource` interface and `OBDSnapshot` shape are already BLE-ready as of Phase 11A / 12-prep — suspending `readSnapshot()` returning `Result<OBDSnapshot>`, hot `connectionState` StateFlow, snapshot tagged with `DataSource.BLUETOOTH` provenance and `EngineFamily` from VIN decode. Phase 12 is the actual implementation: pairing flow, ELM327 AT command sequence, PID round-trip, DTC parsing, error handling for paired-but-not-linked / out-of-range / vehicle-ignition-off. The Python `RealOBDSource` in `reference/carcopilot_design.md §8.2` is the structural reference; the Kotlin equivalent will use BLE GATT rather than python-obd.
 
-### feat/bluetooth-obd branch (audited, awaiting rebase)
+### Bluetooth OBD transport — landed
 
-Will's branch ships a clean ELM327 transport layer (`BluetoothOBDDataSource` Classic SPP + `TcpOBDDataSource` for emulator dev) sharing an `Elm327Protocol.kt` module. Transport code is merge-shaped against the `OBDDataSource` interface. Merge blocked by: `MainActivity` restructure conflicting with W1/W2 `WalkthroughScreen` signature; missing `usesPermissionFlags="neverForLocation"` on `BLUETOOTH_SCAN`; default build flag flipped to `BLUETOOTH`; stray product-rebrand doc at repo root; blank-screen fail mode on null Issue. Path forward: Will rebases onto post-W2 main, drops the product doc, fixes the manifest flag, gates `BLUETOOTH` branch around existing NavHost. Audit details in audit-bt commit message.
+`BluetoothOBDDataSource` (Classic SPP) and `TcpOBDDataSource` ship sharing `Elm327Protocol.kt`. Selected at build time via `-PdataSource=BLUETOOTH`. Manifest requests `BLUETOOTH_CONNECT` (API 31+) with the `usesPermissionFlags="neverForLocation"` carve-out so no location permission is implied. Real-car field-test on the Pixel 9 against a paired ELM327 is the remaining work; the transport and gating UI are in.
 
 ## Known model behaviors
 
@@ -112,3 +113,5 @@ Future approaches when revisited:
 - Re-evaluation when SDK ships a different decoder or model variant with different tokenization
 
 Not currently blocking: spec-heavy step bodies (the kind that matter for repair correctness) survive correctly. Simple bolt-size patterns drift but rarely affect outcome.
+
+**Update (W2.1, commits `8197058` + `7c39164`).** Strengthened prompt and pinned-spec chip row shipped. The prompt change (worked examples for 30→3, 10→1010 patterns, duplicate-digit prohibition) eliminated the catastrophic runaway (~1200-zero step-6 hallucination) and the digit-extension class on the hilux/P0087 path. The digit-truncation class (30 Nm → 3 Nm, 20-30 pumps → 2-3) survived prompt + sampler tightening, so the application-level film-around — `DTCEntry.procedureSpecs` + `ui/components/SpecsChipRow.kt` — pins canonical values deterministically beside the streamed body. Drift in the body now reads as a visible delta against the authoritative chip, not invisible safety-critical damage. Net result: runaway gone, "1010 min" gone, "0 Nm" → "3 Nm" still appears but with "30 Nm (22 ft-lb)" right next to it.

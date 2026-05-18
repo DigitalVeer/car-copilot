@@ -10,16 +10,21 @@ The Python repo in a sibling directory is the original reference implementation.
 
 What's live in the app today:
 
-- **Five screens** wired in `MainActivity`'s NavHost: Home, Issue, Walkthrough, Mechanic Draft, History.
-- **Three live Gemma surfaces**, all streaming token-deltas via LiteRT-LM:
+- **Five screens** wired in `MainActivity`'s NavHost: Home, Issue, Walkthrough, Mechanic Draft, History. The Home screen also crossfades from a `SplashScreen` while `GemmaService.awaitReady()` resolves.
+- **Five live Gemma surfaces**, all streaming token-deltas via LiteRT-LM:
   - `streamSynthesis` — the AI strip on the Issue page
   - `streamMechanicDraft` — the editable text on the Mechanic Draft page
   - `streamHistoryPattern` — the pattern explanation on the History page
-- **Walkthrough screen** renders canned steps from `DTCTable` (not yet a live generation surface; prompt exists at `reference/prompts/walkthrough.md` for when it goes live).
-- **Data layer** (Phase 11): `OBDDataSource` interface → `FixtureOBDDataSource` impl reading `app/src/main/assets/misfire.json`. `IssueBuilder` composes an `Issue` from an `OBDSnapshot` plus a `DTCTable`. The Phase-12-prep fields (`source`, `engineFamily`, `permanentDtcs`) carry on every snapshot for the future Bluetooth path.
-- **Performance** (Phase 8): the `Engine` initializes in `appScope.async` at process start, and a parallel `prewarmJob` sends a dummy "ok" turn and cancels at first token. The Conversation slot is hoisted across calls for KV-cache reuse. ~24% first-token latency win measured on Pixel 9.
-- **Surface multiplexing** (Phase 10A): LiteRT-LM 0.11.0 allows only one Conversation per Engine. `GemmaService.acquireConversationForSurfaceLocked(surface)` closes the existing Conversation when a different surface (synthesis/draft/history) acquires the slot. Each transition pays a system-prompt prefill.
-- **JVM unit test suite** (`./gradlew test`): tests in `app/src/test/java/...` cover the three streaming JSON extractors (`SynthesisStateTest`, `MechanicDraftStateTest`, `HistoryPatternStateTest`), the OBDSnapshot schema (`OBDSnapshotTest`), the snapshot-to-Issue builder (`IssueBuilderTest`), and the DTC classifier table contract (`DTCTableTest`). The on-device Gemma smoke test (`app/src/androidTest/.../GemmaSmokeTest.kt`) is a separate lane gated on a model push to `/data/local/tmp/`. The emulator carries its own stdlib `unittest` suite at `emulator/test_obd_emulator.py` — pure helpers, scenario invariants, and an end-to-end socket exercise.
+  - `streamWalkthroughPlan` — the per-DTC step envelope, grounded against `assets/walkthroughs/<CODE>.md`
+  - `streamWalkthroughStep` — per-step body, using a tighter sampler (temp 0.1, top-p 0.5) for numeric fidelity, plus a `SpecsChipRow` of canonical torque/gap/pressure values pinned beside the body so drifted numbers in the prose are immediately visible against an authoritative reference.
+- **Classification + RAG** (Will's branch, merged): `data/RulesEngine.kt` produces a deterministic `Classification` (confidence, likely cause, supporting signals) from an `OBDSnapshot`. `data/RagStore.kt` retrieves per-DTC context documents from `assets/rag/dtc_context.json` plus an always-applicable general document. Both feed into the synthesis prompt (`{supporting_signals}`, `{rag_context}`, `{engine_family}` fields).
+- **Data layer**: `OBDDataSource` interface implemented by three sources selected at build time via `-PdataSource=FIXTURE|EMULATOR|BLUETOOTH` (`BuildConfig.DATA_SOURCE`).
+  - `FixtureOBDDataSource` reads one of the bundled scenarios — `misfire.json` (P0301 Corolla) or `hilux_fuel_rail.json` (P0087 Hilux diesel) — selected by the `ACTIVE_FIXTURE` const in the file. One-line edit to switch.
+  - `TcpOBDDataSource` + `BluetoothOBDDataSource` share an `Elm327Protocol.kt` ELM327 transport. The BLUETOOTH path requires runtime `BLUETOOTH_CONNECT` (API 31+); see `MainActivity.BluetoothGatedSnapshotViewer`.
+- **DTC table**: `DTCTable.DEFAULT` carries three deep entries (P0301, P0087, P0171) with full title/subtitle/walkthrough/mechanic-draft/specs payloads. At app startup `CarCopilotApp` calls `DTCTable.DEFAULT.withThin(ThinDtcLoader.load(this))` to layer a 256-entry thin catalog from `assets/dtc_codes.json` on top — deep entries always win on conflict.
+- **Performance** (Phase 8): `Engine` initializes in `appScope.async` at process start; a parallel `prewarmJob` sends a dummy "ok" turn and cancels at first token. Conversation slot hoisted across calls for KV-cache reuse. ~24% first-token latency win on Pixel 9.
+- **Surface multiplexing** (Phase 10A): LiteRT-LM 0.11.0 allows one Conversation per Engine. `GemmaService.acquireConversationForSurfaceLocked(surface, sampler?)` closes and recreates the Conversation when a different surface acquires the slot (or when the per-step sampler differs). Each transition pays a system-prompt prefill.
+- **JVM unit test suite** (`./gradlew test`, 158 tests): coverage spans the streaming JSON extractors (`SynthesisStateTest`, `MechanicDraftStateTest`, `HistoryPatternStateTest`, `WalkthroughPlanStateTest`, `WalkthroughStepStateTest`), the OBDSnapshot schema (`OBDSnapshotTest`), the snapshot-to-Issue builder (`IssueBuilderTest`), the DTC table contract (`DTCTableTest`), the deterministic classifier (`RulesEngineTest`), and the ELM327 protocol layer (`Elm327ProtocolTest`). The on-device Gemma smoke test (`app/src/androidTest/.../GemmaSmokeTest.kt`) is a separate lane gated on a model push to `/data/local/tmp/`. The emulator carries its own stdlib `unittest` suite at `emulator/test_obd_emulator.py`.
 
 ## What's broken
 
@@ -62,16 +67,24 @@ These contracts are load-bearing. Touching any of them requires a stop-and-ask:
 | Concern | Source of truth |
 |---|---|
 | What the app is and does | This file, intro |
-| What's been built (history) | `git log` (canonical); this file's "Current state" is a summary, not a phase-by-phase log |
+| What's been built (history) | `git log` (canonical); this file's "Current state" is a summary |
 | Known issues + roadmap | `FUTURE_WORK.md` |
 | Voice rules | `reference/prompts/system.md` |
-| Visual design tokens (colors, type, spacing) | `reference/carcopilot_mockup_v09.html` `<style>` block |
-| DTC classifier table | `app/src/main/java/com/example/carcopilot/data/DTCTable.kt` |
+| Visual design tokens | `reference/carcopilot_mockup_v09.html` `<style>` block |
+| DTC classifier table (deep) | `app/src/main/java/com/example/carcopilot/data/DTCTable.kt` |
+| DTC classifier table (thin, 256 codes) | `app/src/main/assets/dtc_codes.json` (loaded via `ThinDtcLoader`) |
 | Issue data shape | `app/src/main/java/com/example/carcopilot/model/Schema.kt` |
+| Classification shape | `app/src/main/java/com/example/carcopilot/model/Classification.kt` |
+| Deterministic classifier | `app/src/main/java/com/example/carcopilot/data/RulesEngine.kt` |
+| RAG context catalog | `app/src/main/assets/rag/dtc_context.json` (loaded via `RagStore`) |
 | OBD adapter seam | `app/src/main/java/com/example/carcopilot/data/OBDDataSource.kt` |
+| BLE / TCP transport | `data/BluetoothOBDDataSource.kt`, `data/TcpOBDDataSource.kt`, shared `data/Elm327Protocol.kt` |
 | Live-generation surfaces | `app/src/main/java/com/example/carcopilot/inference/GemmaService.kt` |
-| Fallback text | `app/src/main/java/com/example/carcopilot/model/Fallbacks.kt`, `DTCTable` entries, `model/History.kt` |
-| Prompts (consumed at runtime) | `app/src/main/assets/system.md`, `issue_synthesis.md`, `mechanic_draft.md`, `history_pattern.md` (mirrors of `reference/prompts/`) |
+| Prompt assembly + RAG retrieval | `app/src/main/java/com/example/carcopilot/inference/PromptBuilder.kt` |
+| Fallback text | `model/Fallbacks.kt` (per-DTC map + `synthesizeFromClassification()`), `DTCTable` entries, `model/History.kt` |
+| Prompts (consumed at runtime) | `app/src/main/assets/system.md`, `issue_synthesis.md`, `mechanic_draft.md`, `history_pattern.md`, `walkthrough_plan.md`, `walkthrough_step.md`. Originally mirrored from `reference/prompts/`; the assets versions have since added `{engine_family}`, `{supporting_signals}`, and `{rag_context}` template fields that the reference copies don't carry. **The assets versions are now the source of truth at runtime.** |
+| Curated walkthrough procedures | `app/src/main/assets/walkthroughs/<CODE>.md` (P0301, P0087 today; wired via `PromptBuilder.procedures` map) |
+| Walkthrough specs (chip row) | `DTCEntry.procedureSpecs` populated from the curated procedure files; rendered by `ui/components/SpecsChipRow.kt` |
 
 ## Conventions
 
@@ -125,7 +138,7 @@ The target phone is a corporate-managed Pixel 9 — sideload via APK browser is 
 
 ## OBD emulator (Python, dev-only)
 
-A standalone Python 3 TCP server lives at `emulator/obd_emulator.py` — it speaks ELM327 AT commands over a socket so the upcoming Phase-12 transport layer can be developed without an ELM327 dongle and a car. Stdlib only, no `pip install`. Run with `python3 emulator/obd_emulator.py [--scenario corolla|hilux] [--port 35000]`. See `emulator/README.md` for scenarios and protocol coverage. The Android side has not yet been wired to it — Phase 12 work.
+A standalone Python 3 TCP server lives at `emulator/obd_emulator.py` — speaks ELM327 AT commands over a socket so the transport layer can be developed without an ELM327 dongle and a car. Stdlib only, no `pip install`. Run with `python3 emulator/obd_emulator.py [--scenario corolla|hilux] [--port 35000]`. Scenarios and protocol coverage in `emulator/README.md`. The Android side connects via `TcpOBDDataSource`, selected at build time with `-PdataSource=EMULATOR`.
 
 ## Voice constraints (for prompts and fallback text)
 
@@ -147,11 +160,9 @@ Other docs under `reference/` are **historical or mixed** — each carries a STA
 
 ## Out of scope (do not work on without asking)
 
-- Real Bluetooth OBD-II integration (the `OBDDataSource` seam is shape-ready, but `BluetoothOBDDataSource` is unbuilt — see FUTURE_WORK)
-- Live walkthrough generation
-- Real history persistence (`History.ENTRIES/STATS/PATTERN` is in-memory fixture)
+- Real history persistence (`History.ENTRIES/STATS/PATTERN` is in-memory fixture; future seam is a `HistoryRepository`)
 - Spanish translation
 - Push notifications, lockscreen integration
-- Additional DTC scenarios beyond the bundled misfire (`DTCTable` has one entry — extending is data work, see FUTURE_WORK's RAG-backed DTC table item)
 - Settings, vehicle selection, locale switching
 - Mockup HTML refactoring (read-only design source of truth)
+- Constrained / template-based decoding for numeric fidelity (the `SpecsChipRow` film-around is the shipped mitigation; deeper fix is a model/SDK-level change — see FUTURE_WORK)
