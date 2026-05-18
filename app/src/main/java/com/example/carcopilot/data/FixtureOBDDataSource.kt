@@ -64,14 +64,25 @@ class FixtureOBDDataSource(private val context: Context) : OBDDataSource {
             source = DataSource.FIXTURE,
             capturedAt = capturedAt,
             vehicle = vehicle,
-            // The 2009 Corolla 1ZZ-FE is gasoline. UNKNOWN is reserved for
-            // real-hardware snapshots that arrive before VIN decode runs.
-            engineFamily = EngineFamily.PETROL,
+            // Honor the fixture's engine_family if present (e.g. the hilux
+            // diesel scenario sets DIESEL); the legacy misfire fixture
+            // doesn't carry the field, so fall back to PETROL — the 2009
+            // Corolla 1ZZ-FE that the original demo targets. UNKNOWN is
+            // reserved for real-hardware snapshots that arrive before VIN
+            // decode runs.
+            engineFamily = parseEngineFamily(fixture["engine_family"]?.jsonPrimitive?.content),
             dtcs = readDtcCodes(fixture, "raw_dtcs").map { it.toDtc() },
             pendingDtcs = readDtcCodes(fixture, "pending_dtcs").map { it.toDtc() },
             permanentDtcs = emptyList(),
             liveReadings = buildReadings(liveData),
         )
+    }
+
+    private fun parseEngineFamily(raw: String?): EngineFamily = when (raw?.uppercase()) {
+        "PETROL", "GASOLINE" -> EngineFamily.PETROL
+        "DIESEL" -> EngineFamily.DIESEL
+        "HYBRID" -> EngineFamily.HYBRID
+        else -> EngineFamily.PETROL
     }
 
     private fun readDtcCodes(fixture: JsonObject, field: String): List<String> {
@@ -145,6 +156,18 @@ private data class ReadingSpec(
                 if (kotlin.math.abs(v) >= 10) LiveStatus.warning to "compensating" else normal
             },
             "vehicle_speed_kph" to ReadingSpec("Vehicle speed", "kph") { _ -> normal },
+            // Diesel fuel-rail pressure — display name MUST match the key
+            // RulesEngine.classifyFuelRail looks up for P0087 / P1229.
+            // Normal idle on a 2KD-FTV is ~34,500 kPa; thresholds mirror
+            // the bands RulesEngine uses to assign HIGH confidence.
+            "fuel_rail_kpa" to ReadingSpec("Fuel rail pressure", "kPa") { v ->
+                when {
+                    v < 20_000 -> LiveStatus.severe to "critically low"
+                    v < 30_000 -> LiveStatus.warning to "low"
+                    else -> normal
+                }
+            },
+            "engine_load_pct" to ReadingSpec("Engine load", "%") { _ -> normal },
         )
     }
 }
