@@ -198,7 +198,7 @@ private fun DraftMetaRow() {
             modifier = Modifier
                 .size(4.dp)
                 .clip(CircleShape)
-                .background(CarCopilotColors.Accent),
+                .background(CarCopilotColors.AccentInline),
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -241,11 +241,16 @@ private fun DraftMetaRow() {
  */
 @Composable
 private fun PrimaryCta(label: String, enabled: Boolean, onClick: () -> Unit) {
+    // Two-tone discipline for the disabled state: a faded indigo fill +
+    // white text would be unreadable on the light theme, so the disabled
+    // variant uses the soft tint + inline text instead.
+    val bg = if (enabled) CarCopilotColors.Accent else CarCopilotColors.AccentSoft
+    val fg = if (enabled) CarCopilotColors.AccentDeep else CarCopilotColors.AccentInline.copy(alpha = 0.55f)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(CarCopilotColors.Accent.copy(alpha = if (enabled) 1f else 0.4f))
+            .background(bg)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
@@ -253,7 +258,7 @@ private fun PrimaryCta(label: String, enabled: Boolean, onClick: () -> Unit) {
         Text(
             text = label,
             style = CarCopilotTypography.CtaButton,
-            color = CarCopilotColors.AccentDeep,
+            color = fg,
             textAlign = TextAlign.Center,
         )
     }

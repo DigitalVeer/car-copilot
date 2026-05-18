@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.model.Issue
+import com.example.carcopilot.model.Route
 import com.example.carcopilot.model.Severity
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
@@ -155,10 +156,12 @@ private fun GhostCta(label: String, onClick: () -> Unit) {
 }
 
 /**
- * Composes "${cost} · {time} min · {difficulty}" with each fragment rendered
- * weight-500 in MetaBold per spec §5.4 / §5.5. Drivability used to lead this
- * line but moved to its own DrivabilityStrip above the card — the verdict was
- * losing weight competing with cost/time/difficulty for attention.
+ * Composes "${cost} · {time} min · {repair-route}" with each fragment rendered
+ * weight-500 in MetaBold per spec §5.4 / §5.5. The trailing slot used to show
+ * the raw `meta.difficulty` string ("easy"), which feedback flagged as
+ * ambiguous — easy *for whom*, a driver or a mechanic? Now derived from
+ * `issue.route` instead, the same field that already gates the primary CTA,
+ * so the tag and the CTA always agree about who does the work.
  */
 private fun buildMetaLine(issue: Issue): AnnotatedString {
     val m = issue.meta
@@ -170,14 +173,18 @@ private fun buildMetaLine(issue: Issue): AnnotatedString {
         else -> null
     }
     val bold = SpanStyle(color = CarCopilotColors.MetaBold, fontWeight = FontWeight.Medium)
-    // drivability deliberately omitted — it's promoted to the DrivabilityStrip
-    // above the card on the issue screen so the verdict isn't visually tied
-    // with cost/time/difficulty.
     return buildAnnotatedString {
         var first = true
         fun sep() { if (!first) append(" · "); first = false }
         cost?.let { sep(); withStyle(bold) { append(it) } }
         m.timeMinutes?.let { sep(); withStyle(bold) { append("$it min") } }
-        m.difficulty?.let { sep(); withStyle(bold) { append(it) } }
+        routeLabel(issue.route)?.let { sep(); withStyle(bold) { append(it) } }
     }
+}
+
+private fun routeLabel(route: Route): String? = when (route) {
+    Route.diy -> "DIY-friendly"
+    Route.expert -> "Shop visit"
+    Route.safety -> "Stop & call"
+    Route.info -> null
 }

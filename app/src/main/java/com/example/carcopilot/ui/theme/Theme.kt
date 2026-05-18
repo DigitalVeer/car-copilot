@@ -1,10 +1,10 @@
 package com.example.carcopilot.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-private val CarCopilotColorScheme = darkColorScheme(
+private val CarCopilotColorScheme = lightColorScheme(
     background = CarCopilotColors.PhoneBg,
     surface = CarCopilotColors.PhoneCard,
     surfaceVariant = CarCopilotColors.PhoneCardSoft,

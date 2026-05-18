@@ -28,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -152,7 +151,7 @@ private fun RowScope.StatCard(value: String, label: String, accent: Boolean = fa
             .clip(RoundedCornerShape(12.dp))
             .background(CarCopilotColors.PhoneCard)
             .border(1.dp, CarCopilotColors.Line, RoundedCornerShape(12.dp))
-            .padding(14.dp),
+            .padding(16.dp),
     ) {
         Text(
             text = value,
@@ -161,7 +160,7 @@ private fun RowScope.StatCard(value: String, label: String, accent: Boolean = fa
                 fontWeight = FontWeight.Medium,
                 lineHeight = 24.2.sp,
             ),
-            color = if (accent) CarCopilotColors.Accent else CarCopilotColors.Text,
+            color = if (accent) CarCopilotColors.AccentInline else CarCopilotColors.Text,
         )
         Spacer(Modifier.height(4.dp))
         Text(
@@ -252,9 +251,21 @@ private fun TitleWithPills(title: String, pills: List<HistoryPill>) {
 @Composable
 private fun Pill(pill: HistoryPill) {
     val (bg, fg, text) = when (pill) {
-        HistoryPill.Open -> Triple(Color(0x21F5C518), CarCopilotColors.Accent, "in progress")
-        HistoryPill.Resolved -> Triple(Color(0x1A4ADE80), CarCopilotColors.Healthy, "resolved")
-        HistoryPill.Recurrence -> Triple(Color(0x21E44545), Color(0xFFFF9090), "recurrence")
+        HistoryPill.Open -> Triple(
+            CarCopilotColors.AccentSoft,
+            CarCopilotColors.AccentInline,
+            "in progress",
+        )
+        HistoryPill.Resolved -> Triple(
+            CarCopilotColors.HealthySoft,
+            CarCopilotColors.HealthyInline,
+            "resolved",
+        )
+        HistoryPill.Recurrence -> Triple(
+            CarCopilotColors.SevereSoft,
+            CarCopilotColors.SevereInline,
+            "recurrence",
+        )
     }
     Box(
         modifier = Modifier

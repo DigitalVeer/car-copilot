@@ -23,7 +23,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.example.carcopilot.data.OBDDataSource
 import com.example.carcopilot.data.OBDSnapshot
 import com.example.carcopilot.model.LiveStatus
+import com.example.carcopilot.ui.theme.CarCopilotColors
 import kotlinx.coroutines.launch
 
 private sealed interface ViewState {
@@ -72,20 +72,20 @@ fun SnapshotViewerScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0F1117))
+            .background(CarCopilotColors.PhoneBg)
             .padding(horizontal = 20.dp, vertical = 16.dp)
             .verticalScroll(rememberScrollState()),
     ) {
         Text(
             text = "OBD Snapshot",
-            color = Color.White,
+            color = CarCopilotColors.Text,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = "Raw vehicle state — no interpretation",
-            color = Color(0xFF8A8FA8),
+            color = CarCopilotColors.TextMute,
             fontSize = 13.sp,
         )
         Spacer(Modifier.height(20.dp))
@@ -95,7 +95,7 @@ fun SnapshotViewerScreen(
                 InfoBlock(label = "Permission required") {
                     Text(
                         "BLUETOOTH_CONNECT permission is needed to reach the dongle.",
-                        color = Color(0xFFCCCCCC),
+                        color = CarCopilotColors.Text,
                         fontSize = 14.sp,
                     )
                     Spacer(Modifier.height(12.dp))
@@ -107,7 +107,7 @@ fun SnapshotViewerScreen(
 
             state is ViewState.Connecting -> {
                 InfoBlock(label = "Connecting") {
-                    Text("Scanning for dongle…", color = Color(0xFF8A8FA8), fontSize = 14.sp)
+                    Text("Scanning for dongle…", color = CarCopilotColors.TextMute, fontSize = 14.sp)
                 }
             }
 
@@ -115,7 +115,7 @@ fun SnapshotViewerScreen(
                 InfoBlock(label = "Connection failed") {
                     Text(
                         (state as ViewState.Error).message,
-                        color = Color(0xFFFF6B6B),
+                        color = CarCopilotColors.SevereInline,
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -145,7 +145,7 @@ private fun SnapshotContent(snapshot: OBDSnapshot, onRescan: () -> Unit) {
     // ── DTCs ──────────────────────────────────────────────────────────────────
     InfoBlock(label = "Fault codes (${snapshot.dtcs.size} confirmed)") {
         if (snapshot.dtcs.isEmpty()) {
-            Text("No confirmed DTCs", color = Color(0xFF8A8FA8), fontSize = 14.sp)
+            Text("No confirmed DTCs", color = CarCopilotColors.TextMute, fontSize = 14.sp)
         } else {
             snapshot.dtcs.forEach { dtc ->
                 MonoRow(dtc.code, dtc.description)
@@ -155,7 +155,7 @@ private fun SnapshotContent(snapshot: OBDSnapshot, onRescan: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "Pending: ${snapshot.pendingDtcs.joinToString { it.code }}",
-                color = Color(0xFFFFCC44),
+                color = CarCopilotColors.AccentInline,
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace,
             )
@@ -164,7 +164,7 @@ private fun SnapshotContent(snapshot: OBDSnapshot, onRescan: () -> Unit) {
             Spacer(Modifier.height(4.dp))
             Text(
                 "Permanent: ${snapshot.permanentDtcs.joinToString { it.code }}",
-                color = Color(0xFFFF6B6B),
+                color = CarCopilotColors.SevereInline,
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace,
             )
@@ -175,13 +175,13 @@ private fun SnapshotContent(snapshot: OBDSnapshot, onRescan: () -> Unit) {
     // ── Live readings ─────────────────────────────────────────────────────────
     InfoBlock(label = "Live readings (${snapshot.liveReadings.size} PIDs)") {
         if (snapshot.liveReadings.isEmpty()) {
-            Text("No readings returned", color = Color(0xFF8A8FA8), fontSize = 14.sp)
+            Text("No readings returned", color = CarCopilotColors.TextMute, fontSize = 14.sp)
         } else {
             snapshot.liveReadings.forEach { r ->
                 val statusColor = when (r.status) {
-                    LiveStatus.severe  -> Color(0xFFFF6B6B)
-                    LiveStatus.warning -> Color(0xFFFFCC44)
-                    LiveStatus.normal  -> Color(0xFF4ADE80)
+                    LiveStatus.severe  -> CarCopilotColors.SevereInline
+                    LiveStatus.warning -> CarCopilotColors.AccentInline
+                    LiveStatus.normal  -> CarCopilotColors.HealthyInline
                 }
                 Row(
                     modifier = Modifier
@@ -189,7 +189,7 @@ private fun SnapshotContent(snapshot: OBDSnapshot, onRescan: () -> Unit) {
                         .padding(vertical = 3.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(r.key, color = Color(0xFF8A8FA8), fontSize = 13.sp)
+                    Text(r.key, color = CarCopilotColors.TextMute, fontSize = 13.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             "${r.value}${r.unit?.let { " $it" } ?: ""}",
@@ -218,12 +218,12 @@ private fun InfoBlock(label: String, content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF1A1D27))
+            .background(CarCopilotColors.PhoneCard)
             .padding(14.dp),
     ) {
         Text(
             text = label.uppercase(),
-            color = Color(0xFF4A5068),
+            color = CarCopilotColors.TextFaint,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,
@@ -241,10 +241,10 @@ private fun MonoRow(key: String, value: String) {
             .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(key, color = Color(0xFF8A8FA8), fontSize = 13.sp)
+        Text(key, color = CarCopilotColors.TextMute, fontSize = 13.sp)
         Text(
             value,
-            color = Color(0xFFCCCCCC),
+            color = CarCopilotColors.Text,
             fontSize = 13.sp,
             fontFamily = FontFamily.Monospace,
         )

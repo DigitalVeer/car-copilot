@@ -42,6 +42,21 @@ object CarCopilotTypography {
         letterSpacing = 0.16.em,
     )
 
+    /**
+     * Heading style for the AI strip's label slot. Light-theme upgrade:
+     * what used to be a tiny uppercase mono accent label is now a proper
+     * Geist sentence-case heading so the strip carries real prominence
+     * on white. Replaces [AiLabel] inside [AnimatedAIStrip]; AiLabel is
+     * kept for surfaces that still want the small-mono accent style.
+     */
+    val AiHeading = TextStyle(
+        fontFamily = Geist,
+        fontSize = 19.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 24.sp,
+        letterSpacing = (-0.01).em,
+    )
+
     val AiBody = TextStyle(
         fontFamily = Geist,
         fontSize = 15.sp,

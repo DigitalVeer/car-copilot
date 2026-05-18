@@ -77,7 +77,7 @@ private fun BrandMark(vehicleSubtitle: String) {
                     modifier = Modifier
                         .size(5.5.dp)
                         .clip(CircleShape)
-                        .background(CarCopilotColors.Accent),
+                        .background(CarCopilotColors.AccentInline),
                 )
                 Text(
                     text = "COPILOT",
@@ -89,7 +89,7 @@ private fun BrandMark(vehicleSubtitle: String) {
                 modifier = Modifier
                     .width(28.dp)
                     .height(1.5.dp)
-                    .background(CarCopilotColors.Accent.copy(alpha = 0.4f)),
+                    .background(CarCopilotColors.AccentInline.copy(alpha = 0.4f)),
             )
         }
         Text(

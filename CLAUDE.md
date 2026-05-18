@@ -70,7 +70,7 @@ These contracts are load-bearing. Touching any of them requires a stop-and-ask:
 | What's been built (history) | `git log` (canonical); this file's "Current state" is a summary |
 | Known issues + roadmap | `FUTURE_WORK.md` |
 | Voice rules | `reference/prompts/system.md` |
-| Visual design tokens | `reference/carcopilot_mockup_v09.html` `<style>` block |
+| Visual design tokens | `reference/carcopilot_mockup_v10_light.html` `<style>` block (v09 dark is archived) |
 | DTC classifier table (deep) | `app/src/main/java/com/example/carcopilot/data/DTCTable.kt` |
 | DTC classifier table (thin, 256 codes) | `app/src/main/assets/dtc_codes.json` (loaded via `ThinDtcLoader`) |
 | Issue data shape | `app/src/main/java/com/example/carcopilot/model/Schema.kt` |
@@ -90,10 +90,10 @@ These contracts are load-bearing. Touching any of them requires a stop-and-ask:
 
 - **Language:** Kotlin only. No Java.
 - **Async:** Kotlin coroutines (`CoroutineScope(Dispatchers.IO)`, `LaunchedEffect`, `withContext`, `NonCancellable` where teardown must complete). No RxJava, no threads.
-- **UI:** Jetpack Compose. Native composables, NOT a WebView. The HTML mockup at `reference/carcopilot_mockup_v09.html` is visual reference only — extract colors, fonts, spacing, animation timings from its CSS and build equivalent Compose components.
+- **UI:** Jetpack Compose. Native composables, NOT a WebView. The HTML mockup at `reference/carcopilot_mockup_v10_light.html` is visual reference only — extract colors, fonts, spacing, animation timings from its CSS and build equivalent Compose components. The older `carcopilot_mockup_v09.html` (dark theme) is archived; its tokens are no longer current.
 - **Navigation:** Single Activity with Compose `NavController`. Five destinations: `home`, `issue`, `walkthrough`, `draft`, `history`, all wired in `MainActivity`.
 - **Fonts:** Geist and JetBrains Mono in `app/src/main/res/font/`, referenced via `FontFamily` in `ui/theme/Type.kt`. Both open source — Geist from Vercel, JetBrains Mono from JetBrains' GitHub.
-- **Theme:** Custom dark palette in `ui/theme/Color.kt` extracted from the mockup's `:root` CSS variables (`--phone-bg`, `--phone-card`, `--accent`, `--severe`, `--healthy`, etc.). Material3 surfaces with overrides.
+- **Theme:** Apple HIG-influenced light palette in `ui/theme/Color.kt` with indigo (#6366F1) as the single primary action color. Tokens mirror the `:root` CSS variables in `reference/carcopilot_mockup_v10_light.html`. **Two-tone semantic discipline:** every status color has a Fill variant (`Accent`, `Severe`, `Healthy`, `Warning`) for backgrounds/bars/dots and an Inline variant (`AccentInline`, `SevereInline`, `HealthyInline`, `WarningInline`) for text on white. Fill values are illegible as body text on a light surface — never assign a Fill to a `Text` composable. `severity.accentColor()` returns the fill; `severity.accentInlineColor()` returns the inline companion. Brand warmth (the single amber dot in the brand mark) is its own token (`BrandWarmth`), reserved for that one decorative role. Material3 surfaces with overrides.
 - **LLM SDK:** `com.google.ai.edge.litertlm:litertlm-android:0.11.0`. Package `com.google.ai.edge.litertlm.*` — `Engine`, `EngineConfig`, `Backend`, `Conversation`, `ConversationConfig`, `SamplerConfig`, `Message`, `Contents`. (Replaces the older `com.google.mediapipe.tasks.genai.llminference` namespace, which still exists but is deprecated for the LiteRT-LM rebrand.)
 - **Model format:** `.litertlm` (Android/iOS/desktop). The `.task` files in the same `litert-community` Hugging Face repos are the **web** build and will not load via the Android SDK. Default E4B (`gemma-4-E4B-it.litertlm`, ~3.41 GB). Switch to E2B at build time: `./gradlew assembleDebug -PmodelVariant=E2B` — read via `BuildConfig.MODEL_VARIANT` in `GemmaService`.
 - **Manifest:** the GPU backend requires two `<uses-native-library>` entries inside `<application>` to dlopen the vendor OpenCL driver:
@@ -154,7 +154,7 @@ If you find yourself writing canned fallback text that sounds like a developer w
 
 ## Reference materials
 
-`reference/prompts/*.md` and `reference/carcopilot_mockup_v09.html` are **authoritative** — voice rules and design tokens. Treat them as read-only unless the change is intentional.
+`reference/prompts/*.md` and `reference/carcopilot_mockup_v10_light.html` are **authoritative** — voice rules and design tokens. Treat them as read-only unless the change is intentional. `reference/carcopilot_mockup_v09.html` is **archived** (dark theme, superseded by v10_light) and kept only for the history of why the original tokens were shaped the way they are.
 
 Other docs under `reference/` are **historical or mixed** — each carries a STATUS banner at the top describing what's still live vs. what's archaeology. They're kept around for the *why* behind decisions (e.g., why LiteRT-LM and not AICore, why Compose-native and not WebView). Don't take any specification in those files as current without checking the banner.
 

@@ -72,19 +72,23 @@ private fun TabButton(
     icon: @Composable (Color) -> Unit,
     onClick: () -> Unit,
 ) {
-    val tint = if (active) CarCopilotColors.Accent else CarCopilotColors.TextFaint
+    // Icon stroke uses the indigo fill; the label uses the indigo INLINE
+    // variant so the small mono text renders crisply on white per the
+    // two-tone discipline.
+    val iconTint = if (active) CarCopilotColors.Accent else CarCopilotColors.TextFaint
+    val labelTint = if (active) CarCopilotColors.AccentInline else CarCopilotColors.TextFaint
     Column(
         modifier = Modifier
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        icon(tint)
+        icon(iconTint)
         Spacer(Modifier.height(5.dp))
         Text(
             text = label,
             style = CarCopilotTypography.TabLabel,
-            color = tint,
+            color = labelTint,
         )
     }
 }

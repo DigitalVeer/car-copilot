@@ -36,6 +36,7 @@ import com.example.carcopilot.model.Severity
 import com.example.carcopilot.ui.components.OnDeviceChip
 import com.example.carcopilot.ui.components.ThinkingDots
 import com.example.carcopilot.ui.components.accentColor
+import com.example.carcopilot.ui.components.accentInlineColor
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
 
@@ -62,10 +63,11 @@ fun AnimatedAIStrip(
     modifier: Modifier = Modifier,
     outerPadding: PaddingValues = PaddingValues(bottom = 32.dp),
 ) {
-    val accent = severity.accentColor()
+    val accentFill = severity.accentColor()
+    val accentInline = severity.accentInlineColor()
     Box(modifier = modifier.fillMaxWidth().padding(outerPadding)) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            SeverityBar(state = state, accent = accent)
+            SeverityBar(state = state, accent = accentFill)
             Column(
                 modifier = Modifier
                     .padding(start = 6.dp, top = 4.dp, bottom = 4.dp)
@@ -77,16 +79,18 @@ fun AnimatedAIStrip(
                 ) {
                     Text(
                         text = label,
-                        style = CarCopilotTypography.AiLabel,
-                        color = accent,
+                        style = CarCopilotTypography.AiHeading,
+                        color = accentInline,
+                        maxLines = 2,
                         modifier = Modifier.weight(1f),
                     )
+                    Spacer(Modifier.width(10.dp))
                     OnDeviceChip(
                         severity = severity,
                         breathing = state is SynthesisState.Thinking,
                     )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
                 AiBody(state = state, severity = severity)
             }
         }

@@ -5,8 +5,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.data.DTCTable
@@ -53,6 +54,19 @@ private const val GENERIC_STEP_FALLBACK =
     "Snug what you opened, reconnect what you unplugged, and start the engine."
 
 private const val LOADING_CROSSFADE_MS = 300
+
+/**
+ * TEMP — UI iteration bypass.
+ *
+ * When `true`, the walkthrough screen skips the Gemma plan + per-step
+ * generation entirely and uses the canned [Issue.walkthroughSteps] right
+ * away. This lets us iterate on bullet rendering, [Y]-emphasis colors,
+ * and step-card layout without waiting ~2 minutes for the model to
+ * produce a five-step procedure each launch. Flip back to `false`
+ * before committing — production must always go through Gemma so the
+ * surface streams real, vehicle-specific content.
+ */
+private const val DEV_INSTANT_WALKTHROUGH = false
 
 /**
  * Single-loading-event walkthrough.
@@ -97,7 +111,17 @@ fun WalkthroughScreen(
 ) {
     val cannedSteps: List<WalkthroughStep> = issue.walkthroughSteps
     val planFallback: List<PlanStep> = remember(issue.id) {
-        cannedSteps.map { PlanStep(number = it.number, title = it.title, brief = it.body) }
+        // The plan's `brief` doubles as the diagram caption beneath the
+        // engine schematic, so it must not echo the per-step body (the AI
+        // strip already shows that). The canned WalkthroughStep already
+        // carries a `diagramHint` of exactly the right shape — terse,
+        // single-line, written for the schematic — so use it. Fall back
+        // to the step title only if a hint is missing.
+        cannedSteps.map { PlanStep(
+            number = it.number,
+            title = it.title,
+            brief = it.diagramHint ?: it.title,
+        ) }
     }
     val defaultHighlights: List<DiagramTarget> = remember(issue.id) {
         val code = issue.dtcs.firstOrNull()?.code ?: return@remember emptyList()
@@ -114,6 +138,11 @@ fun WalkthroughScreen(
     var stepIndex by remember(issue.id) { mutableIntStateOf(0) }
 
     LaunchedEffect(issue.id) {
+        // TEMP — see DEV_INSTANT_WALKTHROUGH at the top of this file.
+        if (DEV_INSTANT_WALKTHROUGH) {
+            pipelineState = buildReadyFromFallback(planFallback, cannedSteps)
+            return@LaunchedEffect
+        }
         gemma.awaitReady()
         if (gemma.initError != null) {
             pipelineState = buildReadyFromFallback(planFallback, cannedSteps)
@@ -205,6 +234,7 @@ fun WalkthroughScreen(
                         procedureSpecs = procedureSpecs,
                         severity = issue.severity,
                         onAdvance = { stepIndex += 1 },
+                        onRetreat = { if (stepIndex > 0) stepIndex -= 1 },
                         onFinish = onFinish,
                     )
                 }
@@ -230,14 +260,16 @@ private fun WalkthroughContent(
     procedureSpecs: List<WalkthroughSpec>,
     severity: Severity,
     onAdvance: () -> Unit,
+    onRetreat: () -> Unit,
     onFinish: () -> Unit,
 ) {
     val steps = rendered.steps
     val total = steps.size
     val activeRendered = steps.getOrNull(stepIndex) ?: return
     val activeHighlights = highlightsForPlanStep(activeRendered.planStep, defaultHighlights)
+    val isFirst = stepIndex == 0
     val isLast = stepIndex == total - 1
-    val ctaLabel = if (isLast) "Finish →" else "Done — next step →"
+    val nextLabel = if (isLast) "Finish →" else "Done — next step →"
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -267,10 +299,11 @@ private fun WalkthroughContent(
             highlights = activeHighlights,
         )
         Spacer(Modifier.height(18.dp))
-        CtaButton(
-            label = ctaLabel,
-            enabled = true,
-            onClick = { if (isLast) onFinish() else onAdvance() },
+        StepControls(
+            backEnabled = !isFirst,
+            nextLabel = nextLabel,
+            onBack = onRetreat,
+            onNext = { if (isLast) onFinish() else onAdvance() },
         )
     }
 }
@@ -300,7 +333,7 @@ private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF050505))
+                .background(CarCopilotColors.SchematicSurface)
                 .padding(18.dp),
         ) {
             EngineDiagram(highlights = highlights)
@@ -317,28 +350,93 @@ private fun DiagramCard(caption: String, highlights: List<DiagramTarget>) {
 }
 
 /**
- * Walkthrough CTA. Canonical Compose pattern: opacity baked into the
- * background color rather than applied via Modifier.alpha (which would
- * allocate a graphics layer prone to stale-redraw under the loading→content
- * Crossfade above), and `clickable(enabled = …)` rather than a conditional
- * Modifier branch (which would change the modifier chain identity on every
- * enabled flip and force a layout-node reattach).
+ * Bottom-of-page step controls. Two side-by-side buttons:
  *
- * The combination of an alpha-layer + a swap-shaped modifier chain reproduced
- * the "tappable but not visually rendered" bug on Pixel 9 during the W2
- * commit-1 smoke test — Compose scheduled the alpha invalidation but the
- * RenderNode didn't redraw until a touch event dirtied the region, so taps
- * on the invisible button made it appear and then work. See commit message
- * for the full investigation.
+ *   ┌────────────┬────────────────────────┐
+ *   │  ← Back    │  Done — next step →    │
+ *   └────────────┴────────────────────────┘
+ *
+ * Back is a ghost button that retreats one step; disabled (40% alpha, no
+ * pointer) when the user is on step 1 so the row keeps a stable width across
+ * all steps — feedback asked for a Back button "next to" Next, not a
+ * conditional render that would shuffle the Next button's position when the
+ * user reaches step 2.
+ *
+ * Next keeps the original accent fill — it's still the primary action — but
+ * loses the full-width treatment to share the row. Weighted 1.7 : 1 against
+ * Back so the primary stays visually dominant.
+ *
+ * Canonical Compose patterns (carried over from the prior single-CtaButton
+ * implementation): opacity baked into the background color rather than
+ * applied via Modifier.alpha (which would allocate a graphics layer prone
+ * to stale-redraw under the loading→content Crossfade above), and
+ * `clickable(enabled = …)` rather than a conditional Modifier branch (which
+ * would change the modifier chain identity on every enabled flip and force
+ * a layout-node reattach). See the W2 commit-1 investigation for the bug
+ * that motivated those choices.
  */
 @Composable
-private fun CtaButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun StepControls(
+    backEnabled: Boolean,
+    nextLabel: String,
+    onBack: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        BackButton(
+            enabled = backEnabled,
+            onClick = onBack,
+            modifier = Modifier.weight(1f),
+        )
+        NextButton(
+            label = nextLabel,
+            onClick = onNext,
+            modifier = Modifier.weight(1.7f),
+        )
+    }
+}
+
+@Composable
+private fun BackButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val borderColor =
+        if (enabled) CarCopilotColors.LineBright else CarCopilotColors.Line
+    val labelColor =
+        if (enabled) CarCopilotColors.MetaBold else CarCopilotColors.TextFaint
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(CarCopilotColors.Accent.copy(alpha = if (enabled) 1f else 0.4f))
+            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
             .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 13.dp, horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "← Back",
+            style = CarCopilotTypography.CtaButton,
+            color = labelColor,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun NextButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(CarCopilotColors.Accent)
+            .clickable(onClick = onClick)
             .padding(vertical = 13.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {

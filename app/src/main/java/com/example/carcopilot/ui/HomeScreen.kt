@@ -15,8 +15,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import com.example.carcopilot.model.FALLBACK_GOOD_NEWS_MISFIRE
 import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
 import com.example.carcopilot.model.Issue
@@ -28,6 +30,7 @@ import com.example.carcopilot.ui.components.TopBar
 import com.example.carcopilot.ui.components.TopBarLeft
 import com.example.carcopilot.ui.components.TripReadinessTile
 import com.example.carcopilot.ui.theme.CarCopilotColors
+import com.example.carcopilot.ui.theme.CarCopilotTypography
 import kotlinx.coroutines.delay
 
 /**
@@ -77,8 +80,17 @@ fun HomeScreen(
             // below the fold on most phones.
             misfire.tripReadiness?.let { readiness ->
                 TripReadinessTile(readiness = readiness, severity = misfire.severity)
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(22.dp))
             }
+            // Small mono heading anchors the focal card below — without it
+            // the verdict strip and the issue card read as siblings and
+            // the user can't tell which one is the actual diagnosed issue.
+            Text(
+                text = "ACTIVE ISSUE",
+                style = CarCopilotTypography.SectionLabel.copy(letterSpacing = 0.18.em),
+                color = CarCopilotColors.TextFaint,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
             IssueCard(
                 issue = misfire,
                 ctaLabel = "Show me what's going on →",

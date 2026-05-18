@@ -114,7 +114,7 @@ private fun DtcRow(dtc: DTC) {
         Text(
             text = dtc.code,
             style = CarCopilotTypography.DtcCode,
-            color = CarCopilotColors.Accent,
+            color = CarCopilotColors.AccentInline,
         )
         Spacer(Modifier.height(3.dp))
         Text(
@@ -133,8 +133,8 @@ private fun LiveReadingRow(reading: LiveReading, isLast: Boolean) {
         reading.note?.let { append(" — ").append(it) }
     }
     val valueColor = when (reading.status) {
-        LiveStatus.severe -> CarCopilotColors.Severe
-        LiveStatus.warning -> CarCopilotColors.Accent
+        LiveStatus.severe -> CarCopilotColors.SevereInline
+        LiveStatus.warning -> CarCopilotColors.AccentInline
         LiveStatus.normal -> CarCopilotColors.Text
     }
     Row(

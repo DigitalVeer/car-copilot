@@ -81,7 +81,7 @@ private fun SplashBrandMark() {
             modifier = Modifier
                 .size(7.dp)
                 .clip(CircleShape)
-                .background(CarCopilotColors.Accent),
+                .background(CarCopilotColors.AccentInline),
         )
         Spacer(Modifier.width(6.dp))
         Text(

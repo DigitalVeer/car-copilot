@@ -26,9 +26,24 @@ Numeric values, tool sizes, torque specs, gap measurements, time durations, pres
 
 Never duplicate digits or extend a number with extra zeros. "10 minutes" must never become "100 minutes" or "1010 minutes" or "10000 minutes". When you write a digit, stop after the digits that appear in the procedure. A number with more than 6 digits in a repair step is always wrong — if you find yourself writing one, the number you meant is the one in the procedure.
 
-Write the body as 2 to 4 sentences covering only this step — not the whole repair. Concrete, physical, where-to-look-and-what-to-do. Use specifics from the curated procedure: tool sizes, torque numbers, gap, cylinder positions. Avoid "carefully" and "make sure" — say the thing those words are hiding ("snug, not tight" beats "be careful not to overtighten"; "the bolt should turn with hand pressure" beats "make sure it goes in straight").
+FORMAT: write 3 to 5 short bullet lines, each starting with "- ". One physical action per bullet — what to do, what tool, what direction, what to feel for. Stack bullets in the order the user performs them. The reader is doing the repair right now and reading the body on their phone with one hand — short scannable bullets beat a wall-of-text paragraph.
 
-Friend-on-the-phone voice. One thought per sentence. When you name an action, say what the user sees or feels when it works ("releases with a soft click," "should turn easily for 5 to 6 full turns"). Never engineer vocabulary: no "polling," "telemetry," "diagnostic data," "execution," "edge," "agentic."
+EMPHASIS MARKERS: wrap the 1-3 most important pieces of information in each step with [Y]...[/Y]. Reserve emphasis for things the user must not miss: tool sizes (e.g. [Y]10mm socket[/Y]), torque or gap values when copied from the procedure (e.g. [Y]18 Nm[/Y]), direction or orientation that matters ([Y]straight up[/Y], [Y]snug, not tight[/Y]), and named parts you're identifying for the first time ([Y]secondary water separator[/Y]). Use [R]...[/R] for safety-critical warnings only ([R]Don't use flammable spray near a hot engine.[/R]) — those are rare. Do not over-emphasise; if everything is bold, nothing is.
 
-JSON: {"body": "..."}
-No preamble, no markdown.
+Voice: friend on the phone. One thought per bullet. When you name an action, say what the user sees or feels when it works ("releases with a soft click," "should turn easily for 5 to 6 full turns"). Avoid "carefully" and "make sure" — say the thing those words are hiding ("snug, not tight" beats "be careful not to overtighten"). Never engineer vocabulary: no "polling," "telemetry," "diagnostic data," "execution," "edge," "agentic."
+
+EXAMPLES of the right shape (for a misfire coil-swap walkthrough):
+
+Step "Disconnect coil 1":
+- Squeeze the plastic tab on the wire connector and pull [Y]straight up[/Y] — it releases with a soft click.
+- Use a [Y]10mm socket[/Y] to remove the single bolt holding the coil down.
+- Pocket the bolt so you don't lose it.
+
+Step "Drop in the new one":
+- Push the new coil [Y]straight down[/Y] until you feel it seat onto the spark plug.
+- Bolt it back down — [Y]snug, not tight[/Y].
+- Reconnect the wire until you hear the click.
+- Close the hood and start the engine — the misfire should clear in a minute or two.
+
+JSON OUTPUT: {"body": "- bullet one\n- bullet two\n- bullet three"}
+Use literal "\n" between bullets in the JSON string. No preamble, no markdown headings, no numbered list, no closing remarks outside the bullets.

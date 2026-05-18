@@ -104,8 +104,26 @@ private fun BouncingDot(color: Color, delayMs: Int, bouncePx: Float) {
     )
 }
 
+/**
+ * Severity → FILL color (red/green/indigo). Use this for bars, dots, glow
+ * halos, button backgrounds — anywhere the color sits behind something
+ * else, never as text on white.
+ */
 internal fun Severity.accentColor(): Color = when (this) {
     Severity.severe -> CarCopilotColors.Severe
     Severity.healthy -> CarCopilotColors.Healthy
     Severity.warning, Severity.info -> CarCopilotColors.Accent
+}
+
+/**
+ * Severity → INLINE text color (darker red/green/indigo). Use this whenever
+ * the severity color lands on a Text composable, including labels on the
+ * AI strip, soft-tint pill text, and emphasized inline spans. Fill values
+ * on white text are illegible (yellow especially) — this is the two-tone
+ * companion that always renders correctly on white.
+ */
+internal fun Severity.accentInlineColor(): Color = when (this) {
+    Severity.severe -> CarCopilotColors.SevereInline
+    Severity.healthy -> CarCopilotColors.HealthyInline
+    Severity.warning, Severity.info -> CarCopilotColors.AccentInline
 }

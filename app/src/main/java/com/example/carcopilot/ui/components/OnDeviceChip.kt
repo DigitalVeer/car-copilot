@@ -38,7 +38,8 @@ fun OnDeviceChip(
     breathing: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val tint = severity.accentColor()
+    val fill = severity.accentColor()
+    val inline = severity.accentInlineColor()
     val alpha = if (breathing) rememberBreatheAlpha() else 1f
     Text(
         text = CHIP_TEXT,
@@ -47,12 +48,12 @@ fun OnDeviceChip(
             fontSize = 8.5.sp,
             letterSpacing = 0.14.em,
         ),
-        color = tint.copy(alpha = 0.85f),
+        color = inline,
         modifier = modifier
             .graphicsLayer { this.alpha = alpha }
             .clip(RoundedCornerShape(8.dp))
-            .background(tint.copy(alpha = 0.06f))
-            .border(1.dp, tint.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+            .background(fill.copy(alpha = 0.08f))
+            .border(1.dp, fill.copy(alpha = 0.30f), RoundedCornerShape(8.dp))
             .padding(horizontal = 7.dp, vertical = 3.dp),
     )
 }

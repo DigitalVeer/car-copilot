@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAR·COPILOT — light theme tokens v0.10 (SOT)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   CAR·COPILOT — LIGHT THEME v0.10
+   Apple HIG-influenced, indigo primary, two-tone semantic discipline.
+   This file is the SOT for design tokens — v09 (dark theme) is archived.
+   ════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Surface — cool neutrals ───────────────────────────────────── */
+  --phone-bg: #F5F5F7;          /* iOS system gray 6 */
+  --phone-card: #FFFFFF;        /* card / elevated surface */
+  --phone-card-soft: #F0F0F2;   /* chip outer / inset tile */
+
+  /* ── Hairlines & dividers ──────────────────────────────────────── */
+  --line: rgba(0,0,0,0.08);
+  --line-bright: rgba(0,0,0,0.12);
+  --divider: rgba(0,0,0,0.06);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.03);
+
+  /* ── Text — near-black, never pure black ───────────────────────── */
+  --text: #1D1D1F;              /* Apple body */
+  --text-mute: #6E6E73;         /* Apple secondary */
+  --text-faint: #86868B;        /* Apple tertiary */
+  --text-ghost: #AEAEB2;        /* Apple quaternary */
+
+  /* ── Primary accent — indigo, two-tone ─────────────────────────── */
+  --accent-fill: #6366F1;       /* indigo-500 — buttons, bars, dots */
+  --accent-inline: #4F46E5;     /* indigo-600 — text on white */
+  --accent-soft: #EEF0FE;       /* indigo ~10% — pills, tags */
+  --accent-pressed: #4338CA;    /* indigo-700 */
+  --on-accent: #FFFFFF;         /* text on accent fill */
+
+  /* ── Severe — iOS red, two-tone ────────────────────────────────── */
+  --severe-fill: #FF3B30;
+  --severe-inline: #C41E1E;
+  --severe-soft: #FFE5E3;
+
+  /* ── Healthy — iOS green, two-tone ─────────────────────────────── */
+  --healthy-fill: #34C759;
+  --healthy-inline: #1D8038;
+  --healthy-soft: #E3F8E8;
+
+  /* ── Schematic surface — intentional dark inset ────────────────── */
+  --schematic: #050505;
+
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100vh; }
+body {
+  font-family: var(--font-sans);
+  background: var(--phone-bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  padding: 40px 32px 80px;
+}
+
+/* ── Doc shell ────────────────────────────────────────────────────── */
+.shell { max-width: 1280px; margin: 0 auto; }
+.status-banner {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-inline);
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 36px;
+}
+.status-banner b { color: var(--text); font-weight: 500; }
+.status-banner .row { display: block; margin-top: 4px; color: var(--text-mute); text-transform: none; letter-spacing: 0.02em; }
+
+.doc-title {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.doc-sub {
+  color: var(--text-mute);
+  font-size: 15px;
+  margin-bottom: 40px;
+  max-width: 640px;
+}
+
+.section {
+  margin-bottom: 56px;
+}
+.section-heading {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--divider);
+}
+
+/* ── Token swatch grid ────────────────────────────────────────────── */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.swatch {
+  background: var(--phone-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: var(--shadow-card);
+}
+.swatch .chip {
+  width: 100%;
+  height: 56px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+}
+.swatch .chip.transparent { background: repeating-linear-gradient(45deg, #fff, #fff 8px, #f0f0f2 8px, #f0f0f2 16px); }
+.swatch .name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.swatch .hex {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+.swatch .role {
+  font-size: 11px;
+  color: var(--text-mute);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* ── Two-tone discipline matrix ───────────────────────────────────── */
+.matrix {
+  display: grid;
+  grid-template-columns: 110px repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+}
+.matrix > div { background: var(--phone-card); padding: 16px; }
+.matrix .head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+}
+.matrix .row-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+}
+.matrix .cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.matrix .demo-fill { padding: 8px 12px; border-radius: 8px; color: white; font-weight: 500; font-size: 12px; text-align: center; }
+.matrix .demo-inline { font-weight: 500; font-size: 13px; }
+.matrix .demo-soft { padding: 4px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; display: inline-block; }
+.matrix .meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.04em; }
+
+/* ── Screen frame ─────────────────────────────────────────────────── */
+.screens {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 28px;
+}
+.phone {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  background: var(--phone-bg);
+  border: 1px solid var(--line);
+  border-radius: 36px;
+  padding: 26px 22px;
+  box-shadow: var(--shadow-card);
+  min-height: 600px;
+}
+.phone-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+/* Topbar */
+.tb {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.tb .brand {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+  color: var(--text);
+}
+.tb .brand .bd {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background: var(--accent-inline);
+  border-radius: 50%;
+  margin: 0 4px;
+  vertical-align: 3px;
+}
+.tb .brand-underline {
+  width: 28px;
+  height: 1.5px;
+  background: var(--accent-inline);
+  opacity: 0.4;
+  margin-top: 4px;
+}
+.tb .vehicle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-mute);
+  margin-top: 6px;
+}
+
+/* AI strip */
+.ai-strip { display: flex; gap: 6px; align-items: stretch; margin-bottom: 18px; }
+.ai-bar { width: 2px; flex-shrink: 0; background: var(--accent-fill); border-radius: 1px; }
+.ai-bar.severe { background: var(--severe-fill); }
+.ai-bar.healthy { background: var(--healthy-fill); }
+.ai-body { flex: 1; padding-left: 10px; }
+.ai-label {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--accent-inline);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ai-label.severe { color: var(--severe-inline); }
+.ai-label.healthy { color: var(--healthy-inline); }
+.on-device {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--accent-inline);
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.30);
+  padding: 3px 7px;
+  border-radius: 8px;
+}
+.on-device.severe { color: var(--severe-inline); background: rgba(255,59,48,0.06); border-color: rgba(255,59,48,0.30); }
+.ai-text { font-size: 14px; line-height: 22px; color: var(--text); }
+.ai-text .y { color: var(--accent-inline); font-weight: 500; }
+.ai-text .r { color: var(--severe-inline); font-weight: 500; }
+.ai-text .g { color: var(--healthy-inline); font-weight: 500; }
+
+/* Card */
+.card {
+  background: var(--phone-card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 18px;
+  display: flex;
+  overflow: hidden;
+}
+.card-bar { width: 3px; background: var(--accent-fill); flex-shrink: 0; }
+.card-bar.severe { background: var(--severe-fill); }
+.card-bar.healthy { background: var(--healthy-fill); }
+.card-body { padding: 20px; flex: 1; }
+.card-title { font-size: 17px; font-weight: 500; color: var(--text); margin-bottom: 6px; line-height: 1.3; }
+.card-sub { font-size: 13px; color: var(--text-mute); line-height: 1.55; margin-bottom: 16px; }
+.card-meta { font-size: 12px; color: var(--text-mute); margin-bottom: 18px; }
+.card-meta b { color: var(--text); font-weight: 500; }
+
+/* CTA */
+.cta-primary {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.cta-primary.severe { background: var(--severe-fill); }
+.cta-primary.healthy { background: var(--healthy-fill); }
+.cta-primary.disabled { background: var(--accent-soft); color: rgba(79, 70, 229, 0.55); }
+.cta-ghost {
+  border: 1px solid var(--line-bright);
+  color: var(--text);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* Drivability strip */
+.drivability {
+  background: var(--phone-card-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.drivability .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-fill); flex-shrink: 0; }
+.drivability .label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.drivability .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-faint); }
+.drivability .value { font-size: 13px; color: var(--text); }
+
+/* Trip-ready verdict — multi-line variant of drivability, no border, no left bar */
+.verdict {
+  background: var(--phone-card-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.verdict .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-fill); flex-shrink: 0; margin-top: 5px; }
+.verdict .body { flex: 1; }
+.verdict .label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  margin-bottom: 4px;
+}
+.verdict .headline { font-size: 15px; line-height: 21px; color: var(--text); }
+.verdict .caveat { font-size: 13px; color: var(--text-mute); margin-top: 2px; }
+
+/* Active-issue section heading — small mono uppercase wayfinding */
+.active-issue-heading {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+/* History pill */
+.pill {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 8px;
+  display: inline-block;
+}
+.pill.warning { background: var(--accent-soft); color: var(--accent-inline); }
+.pill.healthy { background: var(--healthy-soft); color: var(--healthy-inline); }
+.pill.severe { background: var(--severe-soft); color: var(--severe-inline); }
+
+/* Step pill */
+.step-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-inline);
+  background: var(--accent-soft);
+  padding: 5px 10px;
+  border-radius: 12px;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+.step-bar { display: flex; gap: 4px; margin-bottom: 16px; }
+.step-bar .seg { flex: 1; height: 3px; border-radius: 2px; background: var(--line); }
+.step-bar .seg.done { background: var(--healthy-fill); }
+.step-bar .seg.current { background: var(--accent-fill); }
+
+/* Specs */
+.specs-row {
+  background: var(--phone-card-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Diagram inset */
+.diagram-card {
+  background: var(--phone-card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.diagram-inset {
+  background: var(--schematic);
+  border-radius: 8px;
+  padding: 20px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--accent-fill);
+  text-transform: uppercase;
+}
+
+/* Evidence section */
+.evidence-toggle {
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  display: flex;
+  justify-content: space-between;
+}
+.dtc-row {
+  background: var(--accent-soft);
+  border: 1px solid rgba(99,102,241,0.20);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+.dtc-code { font-family: var(--font-mono); font-size: 12px; color: var(--accent-inline); font-weight: 500; letter-spacing: 0.04em; margin-bottom: 3px; }
+.dtc-desc { font-family: var(--font-mono); font-size: 12px; color: var(--text); line-height: 1.5; }
+
+.reading {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.reading .k { color: var(--text-mute); }
+.reading .v { color: var(--text); font-weight: 500; }
+.reading .v.severe { color: var(--severe-inline); }
+.reading .v.warning { color: var(--accent-inline); }
+
+/* History row */
+.month-heading {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 14px 0 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.history-row { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.history-row .day { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); min-width: 28px; padding-top: 2px; }
+.history-row .body { flex: 1; }
+.history-row .title { font-size: 13px; color: var(--text); margin-bottom: 3px; display: flex; gap: 8px; align-items: center; }
+.history-row .sub { font-size: 12px; color: var(--text-mute); line-height: 1.5; }
+
+/* Stat row */
+.stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--phone-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: var(--shadow-card);
+}
+.stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--text); line-height: 1; margin-bottom: 6px; }
+.stat-value.warning { color: var(--accent-inline); }
+.stat-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-mute); line-height: 1.4; }
+
+/* Mechanic draft body */
+.draft-card {
+  background: var(--phone-card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.draft-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.draft-meta .bd { width: 4px; height: 4px; background: var(--accent-inline); border-radius: 50%; }
+.draft-meta .sep { width: 3px; height: 3px; background: var(--text-mute); border-radius: 50%; }
+.draft-meta .label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-mute); }
+.draft-meta .editable { margin-left: auto; }
+.draft-divider { border-top: 1px solid var(--line); margin-bottom: 12px; }
+.draft-body { font-size: 13px; line-height: 1.6; color: var(--text); }
+
+/* Tab bar */
+.tabbar {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  justify-content: space-around;
+  margin-top: 20px;
+}
+.tabbar .tab {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  text-align: center;
+}
+.tabbar .tab.active { color: var(--accent-inline); }
+
+/* Anti-pattern callout */
+.anti-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.anti {
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--phone-card);
+}
+.anti .head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.anti.bad .head { color: var(--severe-inline); }
+.anti.good .head { color: var(--healthy-inline); }
+.anti .label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; display: inline-block; margin-bottom: 8px; }
+.anti.bad .demo-yellow-text { color: var(--warning-fill); font-weight: 500; }  /* the bug */
+.anti.good .demo-yellow-text { color: var(--warning-inline); font-weight: 500; }  /* the fix */
+.anti .caption { font-size: 12px; color: var(--text-mute); line-height: 1.5; }
+
+.legend {
+  background: var(--phone-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 28px;
+}
+.legend ul { list-style: none; }
+.legend li { font-size: 13px; color: var(--text); padding: 6px 0; padding-left: 18px; position: relative; line-height: 1.6; }
+.legend li::before { content: "·"; position: absolute; left: 6px; color: var(--accent-inline); font-weight: 700; }
+.legend li b { color: var(--accent-inline); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<div class="status-banner">
+  <b>STATUS:</b> ACTIVE — light theme v0.10 is the SOT for design tokens
+  <span class="row">Replaces carcopilot_mockup_v09.html (dark theme, archived). The Android app's ui/theme/Color.kt is the runtime mirror of the tokens defined here.</span>
+</div>
+
+<h1 class="doc-title">CAR·COPILOT — Light theme reference</h1>
+<p class="doc-sub">Apple HIG-influenced light palette with indigo as the single primary action color. Every semantic color gets two variants — a Fill for backgrounds and an Inline for body text — because on a white surface, a yellow #F5B800 button is fine but yellow body text is invisible. The discipline below is the contract.</p>
+
+<!-- ── Surface tokens ─────────────────────────────────────────────── -->
+<section class="section">
+  <h2 class="section-heading">Surface — cool neutrals</h2>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip" style="background:var(--phone-bg)"></div><div class="name">phone-bg</div><div class="hex">#F5F5F7</div><div class="role">phone interior — iOS system gray 6</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--phone-card)"></div><div class="name">phone-card</div><div class="hex">#FFFFFF</div><div class="role">elevated white card</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--phone-card-soft)"></div><div class="name">phone-card-soft</div><div class="hex">#F0F0F2</div><div class="role">chip outer / inset tile</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--schematic)"></div><div class="name">schematic</div><div class="hex">#050505</div><div class="role">engine-diagram inset — intentional dark instrument view</div></div>
+  </div>
+</section>
+
+<!-- ── Text tokens ────────────────────────────────────────────────── -->
+<section class="section">
+  <h2 class="section-heading">Text — near-black, never pure black</h2>
+  <div class="swatch-grid">
+    <div class="swatch"><div class="chip" style="background:var(--text)"></div><div class="name">text</div><div class="hex">#1D1D1F</div><div class="role">primary body — Apple's body color</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--text-mute)"></div><div class="name">text-mute</div><div class="hex">#6E6E73</div><div class="role">secondary — meta, labels</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--text-faint)"></div><div class="name">text-faint</div><div class="hex">#86868B</div><div class="role">tertiary — timestamps, hints</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--text-ghost)"></div><div class="name">text-ghost</div><div class="hex">#AEAEB2</div><div class="role">quaternary — very subtle</div></div>
+  </div>
+</section>
+
+<!-- ── Two-tone matrix ────────────────────────────────────────────── -->
+<section class="section">
+  <h2 class="section-heading">Two-tone semantic discipline</h2>
+  <div class="matrix">
+    <div class="head"></div>
+    <div class="head">Fill — backgrounds</div>
+    <div class="head">Inline — text on white</div>
+    <div class="head">Soft — pill backgrounds</div>
+
+    <div class="row-label">Indigo<br><span class="meta">primary action</span></div>
+    <div class="cell">
+      <div class="demo-fill" style="background:var(--accent-fill)">#6366F1 button</div>
+      <div class="meta">accent-fill</div>
+    </div>
+    <div class="cell">
+      <div class="demo-inline" style="color:var(--accent-inline)">tap to continue →</div>
+      <div class="meta">accent-inline · #4F46E5</div>
+    </div>
+    <div class="cell">
+      <span class="demo-soft" style="background:var(--accent-soft);color:var(--accent-inline)">STEP 1 / 5</span>
+      <div class="meta">accent-soft · #EEF0FE</div>
+    </div>
+
+    <div class="row-label">Red<br><span class="meta">severe / danger</span></div>
+    <div class="cell">
+      <div class="demo-fill" style="background:var(--severe-fill)">#FF3B30 stop</div>
+      <div class="meta">severe-fill</div>
+    </div>
+    <div class="cell">
+      <div class="demo-inline" style="color:var(--severe-inline)">stop driving immediately</div>
+      <div class="meta">severe-inline · #C41E1E</div>
+    </div>
+    <div class="cell">
+      <span class="demo-soft" style="background:var(--severe-soft);color:var(--severe-inline)">RECURRENCE</span>
+      <div class="meta">severe-soft · #FFE5E3</div>
+    </div>
+
+    <div class="row-label">Green<br><span class="meta">healthy / success</span></div>
+    <div class="cell">
+      <div class="demo-fill" style="background:var(--healthy-fill)">#34C759 ok</div>
+      <div class="meta">healthy-fill</div>
+    </div>
+    <div class="cell">
+      <div class="demo-inline" style="color:var(--healthy-inline)">all systems normal</div>
+      <div class="meta">healthy-inline · #1D8038</div>
+    </div>
+    <div class="cell">
+      <span class="demo-soft" style="background:var(--healthy-soft);color:var(--healthy-inline)">RESOLVED</span>
+      <div class="meta">healthy-soft · #E3F8E8</div>
+    </div>
+
+  </div>
+  <p class="doc-sub" style="margin-top:20px;max-width:760px;">No amber. The matrix has three rows because the system has three semantic colors — indigo carries primary action AND inline emphasis; red marks severe; green marks healthy. The "in progress" status pill that historically read as warning amber is now indigo-soft + indigo-inline, because there is no surface where a fourth hue earns its keep on this palette.</p>
+</section>
+
+<!-- ── Brand identity — single-hue cohesion ────────────────────────── -->
+<section class="section">
+  <h2 class="section-heading">Brand identity — single-hue cohesion</h2>
+  <div class="legend">
+    <ul>
+      <li><b>The brand mark uses indigo-inline (#4F46E5), not a separate brand color.</b> Earlier drafts kept a single amber decorative dot as "brand warmth," but on the indigo+red+green+neutral palette the warm note read as off-key — the dot felt like a leftover, not a deliberate accent. The current direction threads the indigo identity through every CAR·COPILOT element: brand-mark dots (Splash, TopBar, MechanicDraft "FROM CAR · COPILOT"), the brand underline, the AI strip heading.</li>
+      <li><b>Two indigos, one identity.</b> Buttons and severity bars use the indigo Fill (#6366F1); brand marks, inline emphasis, and small chrome use the slightly deeper Inline (#4F46E5). The pair reads as one family of "this product's voice," with the small tonal step distinguishing "tap here" from "you are here."</li>
+      <li><b>No amber, no fourth hue.</b> Earlier passes kept an amber "warning" tier alongside indigo/red/green. On-device review showed the residual amber (used for inline emphasis and the in-progress pill) read as off-key brownish-yellow on white. Collapsing it into the primary indigo simplified the system without losing any signal — the in-progress pill is still distinct from the resolved (green) and recurrence (red) variants.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ── Screens ──────────────────────────────────────────────────── -->
+<section class="section">
+  <h2 class="section-heading">Screen samples</h2>
+  <div class="screens">
+
+    <!-- HOME -->
+    <div>
+      <div class="phone-label">Home — misfire (warning severity)</div>
+      <div class="phone">
+        <div class="tb">
+          <div>
+            <div class="brand">CAR<span class="bd"></span>COPILOT</div>
+            <div class="brand-underline"></div>
+            <div class="vehicle">2009 TOYOTA COROLLA · 152K MI</div>
+          </div>
+        </div>
+        <div class="ai-strip">
+          <div class="ai-bar"></div>
+          <div class="ai-body">
+            <div class="ai-label">Today's drive<span class="on-device">GEMMA · ON-DEVICE</span></div>
+            <div class="ai-text">Cylinder one is misfiring — feel a stumble at idle. <span class="y">Check the spark plug and coil pack</span> when you have an hour.</div>
+          </div>
+        </div>
+        <div class="verdict">
+          <div class="dot"></div>
+          <div class="body">
+            <div class="label">TRIP READY</div>
+            <div class="headline">Safe for short trips</div>
+          </div>
+        </div>
+        <div class="active-issue-heading">ACTIVE ISSUE</div>
+        <div class="card">
+          <div class="card-bar"></div>
+          <div class="card-body">
+            <div class="card-title">Cylinder 1 misfire</div>
+            <div class="card-sub">A single cylinder is missing the ignition window — felt as a stumble at low rpm.</div>
+            <div class="card-meta"><b>$45</b> · <b>45 min</b> · <b>DIY-friendly</b></div>
+            <div class="cta-primary">Show me what's going on →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ISSUE -->
+    <div>
+      <div class="phone-label">Issue — full diagnostic</div>
+      <div class="phone">
+        <div class="tb">
+          <div>
+            <div class="brand">CAR<span class="bd"></span>COPILOT</div>
+            <div class="brand-underline"></div>
+          </div>
+        </div>
+        <div class="ai-strip">
+          <div class="ai-bar"></div>
+          <div class="ai-body">
+            <div class="ai-label">Here's what I'm seeing<span class="on-device">GEMMA · ON-DEVICE</span></div>
+            <div class="ai-text">P0301 means cylinder one isn't firing properly. The most common cause is a tired <span class="y">spark plug or coil pack</span> — both easy to replace.</div>
+          </div>
+        </div>
+        <div class="drivability">
+          <div class="dot"></div>
+          <div class="label">DRIVABILITY</div>
+          <div class="sep"></div>
+          <div class="value">Safe for short trips</div>
+        </div>
+        <div class="card">
+          <div class="card-bar"></div>
+          <div class="card-body">
+            <div class="card-title">Cylinder 1 misfire</div>
+            <div class="card-sub">A single cylinder is missing the ignition window — felt as a stumble at low rpm.</div>
+            <div class="card-meta"><b>$45</b> · <b>45 min</b> · <b>DIY-friendly</b></div>
+            <div class="cta-primary">Walk me through the fix →</div>
+            <div class="cta-ghost">Send this to a mechanic instead</div>
+          </div>
+        </div>
+        <div class="evidence-toggle"><span>SHOW RAW DATA FOR A MECHANIC</span><span style="color:var(--text-mute)">▼</span></div>
+        <div class="dtc-row">
+          <div class="dtc-code">P0301</div>
+          <div class="dtc-desc">CYLINDER 1 MISFIRE DETECTED</div>
+        </div>
+        <div class="reading"><span class="k">RPM</span><span class="v">685 RPM</span></div>
+        <div class="reading"><span class="k">COOLANT</span><span class="v">88 °C</span></div>
+        <div class="reading"><span class="k">MISFIRE COUNT</span><span class="v warning">17 / 200 — uneven</span></div>
+        <div class="reading"><span class="k">FUEL TRIM</span><span class="v severe">+18% — running lean</span></div>
+      </div>
+    </div>
+
+    <!-- WALKTHROUGH -->
+    <div>
+      <div class="phone-label">Walkthrough — step 2 / 5</div>
+      <div class="phone">
+        <div class="tb">
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-mute);letter-spacing:0.04em;">‹ BACK</div>
+        </div>
+        <div class="step-pill">STEP 2 / 5</div>
+        <div class="step-bar">
+          <div class="seg done"></div>
+          <div class="seg current"></div>
+          <div class="seg"></div>
+          <div class="seg"></div>
+          <div class="seg"></div>
+        </div>
+        <div class="ai-strip">
+          <div class="ai-bar"></div>
+          <div class="ai-body">
+            <div class="ai-label">Unclip the coil pack<span class="on-device">GEMMA · ON-DEVICE</span></div>
+            <div class="ai-text">Pull the plastic clip on top of coil one straight up — it'll lift with a soft click. Set the connector aside on the valve cover.</div>
+          </div>
+        </div>
+        <div class="specs-row">
+          <span>SPECS FROM PROCEDURE</span>
+          <span style="color:var(--text-faint)">▼</span>
+        </div>
+        <div class="diagram-card">
+          <div class="diagram-inset">↑ COIL 1 · ENGINE SCHEMATIC</div>
+          <div style="text-align:center;font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;color:var(--text-mute);margin-top:10px;">UNCLIP COIL ONE FROM THE VALVE COVER</div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <div class="cta-ghost" style="flex:1;">← Back</div>
+          <div class="cta-primary" style="flex:1.7;margin-bottom:0;">Done — next step →</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MECHANIC DRAFT -->
+    <div>
+      <div class="phone-label">Mechanic draft</div>
+      <div class="phone">
+        <div class="tb">
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-mute);letter-spacing:0.04em;">‹ BACK</div>
+        </div>
+        <div class="ai-strip">
+          <div class="ai-bar"></div>
+          <div class="ai-body">
+            <div class="ai-label">Drafted for you<span class="on-device">GEMMA · ON-DEVICE</span></div>
+            <div class="ai-text">Here's a message you can send to a shop. They'll know exactly what to look at — most won't charge a diagnostic fee if you come in with this.</div>
+          </div>
+        </div>
+        <div class="draft-card">
+          <div class="draft-meta">
+            <div class="bd"></div>
+            <span class="label">FROM CAR</span>
+            <div class="sep"></div>
+            <span class="label">COPILOT</span>
+            <span class="label editable">EDITABLE</span>
+          </div>
+          <div class="draft-divider"></div>
+          <div class="draft-body">2009 Toyota Corolla — 152k miles. CEL came on Tuesday. Got code P0301 (cylinder 1 misfire). Misfire count 17/200 over the last drive, fuel trim +18%. Can you check the coil and plug on cylinder 1?</div>
+        </div>
+        <div class="cta-primary">Looks good — open Messages →</div>
+        <div class="cta-ghost">Edit before sending</div>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div>
+      <div class="phone-label">History — pattern surface</div>
+      <div class="phone">
+        <div class="tb">
+          <div>
+            <div class="brand">CAR<span class="bd"></span>COPILOT</div>
+            <div class="brand-underline"></div>
+            <div class="vehicle">HISTORY · 2009 COROLLA</div>
+          </div>
+        </div>
+        <div class="ai-strip">
+          <div class="ai-bar"></div>
+          <div class="ai-body">
+            <div class="ai-label">Seeing a pattern<span class="on-device">GEMMA · ON-DEVICE</span></div>
+            <div class="ai-text">Coil packs have failed on this car <span class="y">three times in eighteen months</span>. The pattern is unusual — worth asking a mechanic to check the harness on coil one.</div>
+          </div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-card"><div class="stat-value">12</div><div class="stat-label">ISSUES<br>RESOLVED</div></div>
+          <div class="stat-card"><div class="stat-value warning">3</div><div class="stat-label">COIL<br>FAILURES</div></div>
+          <div class="stat-card"><div class="stat-value">$420</div><div class="stat-label">SPENT<br>THIS YEAR</div></div>
+        </div>
+        <div class="month-heading">MAY 2026</div>
+        <div class="history-row">
+          <div class="day">18</div>
+          <div class="body">
+            <div class="title">Cylinder 1 misfire<span class="pill warning">IN PROGRESS</span></div>
+            <div class="sub">P0301 · 17 misfires over 200 revs · running lean</div>
+          </div>
+        </div>
+        <div class="month-heading">FEB 2026</div>
+        <div class="history-row">
+          <div class="day">04</div>
+          <div class="body">
+            <div class="title">Coil pack replaced<span class="pill healthy">RESOLVED</span></div>
+            <div class="sub">P0301 · replaced coil 1 at the shop</div>
+          </div>
+        </div>
+        <div class="history-row">
+          <div class="day">22</div>
+          <div class="body">
+            <div class="title">Misfire returned<span class="pill severe">RECURRENCE</span></div>
+            <div class="sub">P0301 · third coil failure on the same cylinder</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── Implementation notes ──────────────────────────────────────── -->
+<section class="section">
+  <h2 class="section-heading">Implementation notes for future agents</h2>
+  <div class="legend">
+    <ul>
+      <li><b>Single SOT:</b> tokens above are mirrored in <code>app/src/main/java/com/example/carcopilot/ui/theme/Color.kt</code>. Change tokens there; do not patch composables one-by-one.</li>
+      <li><b>Two-tone rule:</b> for any color with a Fill and an Inline variant, Fill is for backgrounds (buttons, bars, dots), Inline is for body text on white. The Severity → Color helpers in <code>ThinkingDots.kt</code> expose both as <code>accentColor()</code> (fill) and <code>accentInlineColor()</code> (text).</li>
+      <li><b>Soft pills:</b> status pills always render as Soft background + Inline text. Never solid-fill pills.</li>
+      <li><b>Hairline + barely-there shadow:</b> cards use a 1px border at rgba(0,0,0,0.08) plus an optional 0 1px 2px rgba(0,0,0,0.03) shadow. Avoid Material elevation past 1dp.</li>
+      <li><b>Mono is technical:</b> JetBrains Mono is reserved for DTC codes, readings, debug labels. Geist carries body and chrome. Don't broaden mono usage.</li>
+      <li><b>One primary action color:</b> every "this is the thing to tap" affordance uses indigo Fill. Severity-tinted CTAs only for severe/healthy cases.</li>
+      <li><b>Pure black is banned:</b> use #1D1D1F for text. The schematic surface (#050505) is the one exception — it's a purposeful "instrument view," not a body surface.</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

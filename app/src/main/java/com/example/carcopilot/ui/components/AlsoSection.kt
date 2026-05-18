@@ -9,7 +9,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.carcopilot.ui.theme.CarCopilotColors
 import com.example.carcopilot.ui.theme.CarCopilotTypography
@@ -49,7 +48,7 @@ private fun AlsoRow(text: String) {
         Text(
             text = text,
             style = CarCopilotTypography.AlsoRow,
-            color = Color(0xFFC8C8C8),
+            color = CarCopilotColors.Text,
         )
     }
 }
