@@ -62,7 +62,7 @@ fun EvidenceToggle(
         Text(
             text = label,
             style = CarCopilotTypography.SectionLabel,
-            color = CarCopilotColors.TextMute,
+            color = CarCopilotColors.MetaBold,
         )
         Chevron(rotated = open)
     }
@@ -95,7 +95,7 @@ private fun SectionHeading(text: String) {
     Text(
         text = text,
         style = CarCopilotTypography.EvidenceSectionHeading,
-        color = CarCopilotColors.TextFaint,
+        color = CarCopilotColors.TextMute,
         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
     )
 }
@@ -120,7 +120,7 @@ private fun DtcRow(dtc: DTC) {
         Text(
             text = dtc.description,
             style = CarCopilotTypography.DtcDescription,
-            color = CarCopilotColors.TextMute,
+            color = CarCopilotColors.MetaBold,
         )
     }
 }
@@ -158,7 +158,7 @@ private fun LiveReadingRow(reading: LiveReading, isLast: Boolean) {
         Text(
             text = reading.key,
             style = CarCopilotTypography.EvidenceRowKey,
-            color = CarCopilotColors.TextMute,
+            color = CarCopilotColors.MetaBold,
         )
         Text(
             text = valueText,
@@ -171,7 +171,7 @@ private fun LiveReadingRow(reading: LiveReading, isLast: Boolean) {
 /** Down-pointing chevron, animates a 180° rotation when `rotated` flips. */
 @Composable
 private fun Chevron(rotated: Boolean) {
-    val tint = CarCopilotColors.TextMute
+    val tint = CarCopilotColors.MetaBold
     val rotation by animateFloatAsState(
         targetValue = if (rotated) 180f else 0f,
         animationSpec = tween(durationMillis = 200),

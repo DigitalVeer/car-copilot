@@ -63,20 +63,19 @@ fun HistoryScreen(
             state = HistoryPatternState.Ready(body = History.PATTERN.body, isFallback = true)
             return@LaunchedEffect
         }
-        val buf = StringBuilder()
         try {
-            gemma.streamHistoryPattern(History.ENTRIES, currentIssue).collect { delta ->
-                buf.append(delta)
-                val progress = extractHistoryPatternInProgress(buf.toString())
-                if (progress.partial.isNotEmpty()) {
-                    state = HistoryPatternState.Streaming(progress.partial)
-                }
-            }
-            state = if (buf.isEmpty()) {
-                HistoryPatternState.Ready(body = History.PATTERN.body, isFallback = true)
-            } else {
-                parseHistoryPatternOrFallback(buf.toString(), History.PATTERN.body)
-            }
+            typewriterCollect(
+                source = gemma.streamHistoryPattern(History.ENTRIES, currentIssue),
+                extractDisplay = { raw -> extractHistoryPatternInProgress(raw).partial },
+                onStreaming = { displayed -> state = HistoryPatternState.Streaming(displayed) },
+                onDone = { raw ->
+                    state = if (raw.isEmpty()) {
+                        HistoryPatternState.Ready(body = History.PATTERN.body, isFallback = true)
+                    } else {
+                        parseHistoryPatternOrFallback(raw, History.PATTERN.body)
+                    }
+                },
+            )
         } catch (_: Throwable) {
             state = HistoryPatternState.Ready(body = History.PATTERN.body, isFallback = true)
         }

@@ -70,20 +70,19 @@ fun MechanicDraftScreen(
             state = MechanicDraftState.Ready(draft = fallbackDraft, isFallback = true)
             return@LaunchedEffect
         }
-        val buf = StringBuilder()
         try {
-            gemma.streamMechanicDraft(issue).collect { delta ->
-                buf.append(delta)
-                val progress = extractDraftInProgress(buf.toString())
-                if (progress.partial.isNotEmpty()) {
-                    state = MechanicDraftState.Streaming(progress.partial)
-                }
-            }
-            state = if (buf.isEmpty()) {
-                MechanicDraftState.Ready(draft = fallbackDraft, isFallback = true)
-            } else {
-                parseDraftOrFallback(buf.toString(), fallbackDraft)
-            }
+            typewriterCollect(
+                source = gemma.streamMechanicDraft(issue),
+                extractDisplay = { raw -> extractDraftInProgress(raw).partial },
+                onStreaming = { displayed -> state = MechanicDraftState.Streaming(displayed) },
+                onDone = { raw ->
+                    state = if (raw.isEmpty()) {
+                        MechanicDraftState.Ready(draft = fallbackDraft, isFallback = true)
+                    } else {
+                        parseDraftOrFallback(raw, fallbackDraft)
+                    }
+                },
+            )
         } catch (_: Throwable) {
             state = MechanicDraftState.Ready(draft = fallbackDraft, isFallback = true)
         }

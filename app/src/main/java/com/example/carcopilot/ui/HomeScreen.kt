@@ -71,6 +71,14 @@ fun HomeScreen(
                 label = "Today's drive",
                 severity = misfire.severity,
             )
+            // Trip readiness sits directly below the AI strip — it's the single
+            // sentence the driver most needs to see ("Safe for short trips"),
+            // and burying it under the IssueCard + AlsoSection meant it lived
+            // below the fold on most phones.
+            misfire.tripReadiness?.let { readiness ->
+                TripReadinessTile(readiness = readiness, severity = misfire.severity)
+                Spacer(Modifier.height(20.dp))
+            }
             IssueCard(
                 issue = misfire,
                 ctaLabel = "Show me what's going on →",
@@ -83,10 +91,6 @@ fun HomeScreen(
                     "Front-left tire low at 22 PSI",
                 ),
             )
-            misfire.tripReadiness?.let { readiness ->
-                Spacer(Modifier.height(28.dp))
-                TripReadinessTile(readiness = readiness, severity = misfire.severity)
-            }
         }
         BottomTabBar(
             selected = Tab.Home,

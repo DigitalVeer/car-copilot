@@ -155,9 +155,10 @@ private fun GhostCta(label: String, onClick: () -> Unit) {
 }
 
 /**
- * Composes "{drivability} · ${cost} · {time} min · {difficulty}" with the
- * cost/time/difficulty fragments rendered weight-500 in MetaBold per spec
- * §5.4 / §5.5.
+ * Composes "${cost} · {time} min · {difficulty}" with each fragment rendered
+ * weight-500 in MetaBold per spec §5.4 / §5.5. Drivability used to lead this
+ * line but moved to its own DrivabilityStrip above the card — the verdict was
+ * losing weight competing with cost/time/difficulty for attention.
  */
 private fun buildMetaLine(issue: Issue): AnnotatedString {
     val m = issue.meta
@@ -169,10 +170,12 @@ private fun buildMetaLine(issue: Issue): AnnotatedString {
         else -> null
     }
     val bold = SpanStyle(color = CarCopilotColors.MetaBold, fontWeight = FontWeight.Medium)
+    // drivability deliberately omitted — it's promoted to the DrivabilityStrip
+    // above the card on the issue screen so the verdict isn't visually tied
+    // with cost/time/difficulty.
     return buildAnnotatedString {
         var first = true
         fun sep() { if (!first) append(" · "); first = false }
-        m.drivability?.let { sep(); append(it.replaceFirstChar { c -> c.uppercaseChar() }) }
         cost?.let { sep(); withStyle(bold) { append(it) } }
         m.timeMinutes?.let { sep(); withStyle(bold) { append("$it min") } }
         m.difficulty?.let { sep(); withStyle(bold) { append(it) } }
