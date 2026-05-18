@@ -46,6 +46,7 @@ class PromptBuilder(context: Context) {
      */
     private val procedures: Map<String, String> = mapOf(
         "P0301" to context.assets.open("walkthroughs/P0301.md").bufferedReader().use { it.readText() },
+        "P0087" to context.assets.open("walkthroughs/P0087.md").bufferedReader().use { it.readText() },
     )
 
     fun renderSynthesisPrompt(
