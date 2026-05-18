@@ -57,7 +57,9 @@ private fun decodeDtcBytes(b1: Int, b2: Int): String {
 }
 
 internal val DTC_DESCRIPTIONS = mapOf(
+    "P0101" to "Mass air flow circuit range/performance",
     "P0171" to "System too lean (Bank 1)",
+    "P0300" to "Random/multiple cylinder misfire detected",
     "P0301" to "Cylinder 1 misfire detected",
     "P0302" to "Cylinder 2 misfire detected",
     "P0303" to "Cylinder 3 misfire detected",
@@ -66,6 +68,7 @@ internal val DTC_DESCRIPTIONS = mapOf(
     "P1229" to "SCV (suction control valve) circuit fault",
     "P0401" to "EGR flow insufficient",
     "P0420" to "Catalyst efficiency below threshold (Bank 1)",
+    "P0507" to "Idle control system RPM too high",
 )
 
 // ── PID decoding ──────────────────────────────────────────────────────────────

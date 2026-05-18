@@ -49,10 +49,15 @@ PORT = 35000
 #   23  Rail pressure kPa ((A*256)+B)*10        28000    → 0A F0
 #   42  Battery V        ((A*256)+B)/1000       12.4V    → 30 70
 
+# All scenarios use the same vehicle so the app's hardcoded VehicleInfo stays consistent.
+_VIN  = "JTDBR32E390123456"
+_NAME = "2009 Toyota Corolla 1ZZ-FE petrol"
+
 SCENARIOS = {
+    # ── P0171 — lean condition, dirty MAF ────────────────────────────────────
     "corolla": {
-        "name": "2009 Toyota Corolla 1ZZ-FE petrol — P0171 lean condition",
-        "vin":  "JTDBR32E390123456",
+        "name": f"{_NAME} — P0171 lean condition",
+        "vin":  _VIN,
         "confirmed_dtcs": ["P0171"],
         "pending_dtcs":   [],
         "permanent_dtcs": ["P0171"],
@@ -64,56 +69,29 @@ SCENARIOS = {
             "11": "24",      # Throttle 14%
             "0F": "41",      # IAT 25°C
             "10": "00 B9",   # MAF 1.85 g/s (low — lean symptom)
-            "06": "8F",      # STFT B1 +12% (ECU trimming rich)
+            "06": "8F",      # STFT B1 +12%
             "07": "97",      # LTFT B1 +18% (chronic lean)
-            "14": "28 FF",   # O2 S1 0.2V (lean)
+            "14": "28 FF",   # O2 S1 0.20V (lean)
             "15": "90 FF",   # O2 S2 0.72V
             "42": "30 70",   # Battery 12.4V
         },
         "freeze_frame": {
             "dtc": "P0171",
             "pids": {
-                "0C": "0C 80",   # RPM 800 at fault set
+                "0C": "0C 80",   # RPM 800
                 "05": "7D",      # Coolant 85°C
                 "04": "45",      # Load 27%
                 "0D": "00",
                 "10": "00 83",   # MAF 1.31 g/s (very low — fault trigger)
-                "07": "9F",      # LTFT B1 +22.7%
+                "07": "9F",      # LTFT B1 +23%
             },
         },
     },
 
-    "hilux": {
-        "name": "2008 Toyota Hilux 2KD-FTV diesel — P0087 fuel rail pressure low",
-        "vin":  "MR0HZ3CDX00123456",
-        "confirmed_dtcs": ["P0087", "P1229"],
-        "pending_dtcs":   ["P0087"],
-        "permanent_dtcs": ["P0087"],
-        "pids": {
-            "0C": "0B B8",   # RPM 750
-            "05": "7D",      # Coolant 85°C
-            "04": "40",      # Load 25%
-            "0D": "00",      # Speed 0
-            "11": "1A",      # Throttle 10%
-            "0F": "3F",      # IAT 23°C
-            "23": "0A F0",   # Fuel rail 28,000 kPa (low; target ~34,500)
-            "42": "30 D4",   # Battery 12.5V
-        },
-        "freeze_frame": {
-            "dtc": "P0087",
-            "pids": {
-                "0C": "0B B8",   # RPM 750
-                "05": "75",      # Coolant 77°C (cold start — fault set early)
-                "04": "4C",      # Load 30%
-                "0D": "00",
-                "23": "09 5A",   # Rail pressure 23,940 kPa (very low at fault set)
-            },
-        },
-    },
-
-    "misfire": {
-        "name": "2014 Toyota Camry 2AR-FE petrol — P0301 cylinder 1 misfire",
-        "vin":  "4T1BF1FK0EU123456",
+    # ── P0301 — cylinder 1 misfire, failed ignition coil ─────────────────────
+    "coil": {
+        "name": f"{_NAME} — P0301 cylinder 1 misfire (coil failure)",
+        "vin":  _VIN,
         "confirmed_dtcs": ["P0301"],
         "pending_dtcs":   ["P0301"],
         "permanent_dtcs": ["P0301"],
@@ -125,11 +103,11 @@ SCENARIOS = {
             "11": "29",      # Throttle 16%
             "0F": "43",      # IAT 27°C
             "10": "01 5E",   # MAF 3.50 g/s
-            "06": "8A",      # STFT B1 +8% (compensating for misfire)
+            "06": "8A",      # STFT B1 +8%
             "07": "88",      # LTFT B1 +6%
-            "14": "1E FF",   # O2 S1 0.15V (lean spikes from unburned air)
+            "14": "1E FF",   # O2 S1 0.15V (lean — unburned air from dead cylinder)
             "15": "8C FF",   # O2 S2 0.70V
-            "42": "37 14",   # Battery 14.1V (engine running, alternator)
+            "42": "37 14",   # Battery 14.1V
         },
         "freeze_frame": {
             "dtc": "P0301",
@@ -140,6 +118,176 @@ SCENARIOS = {
                 "0D": "32",      # Speed 50 kph
                 "11": "51",      # Throttle 32%
                 "10": "03 B6",   # MAF 9.50 g/s
+            },
+        },
+    },
+
+    # ── P0171 + P0101 — lean with MAF circuit fault ───────────────────────────
+    "lean_maf": {
+        "name": f"{_NAME} — P0171+P0101 lean + MAF fault",
+        "vin":  _VIN,
+        "confirmed_dtcs": ["P0171", "P0101"],
+        "pending_dtcs":   ["P0171"],
+        "permanent_dtcs": ["P0171"],
+        "pids": {
+            "0C": "0C 58",   # RPM 790
+            "05": "7F",      # Coolant 87°C
+            "04": "36",      # Load 21%
+            "0D": "00",      # Speed 0
+            "11": "22",      # Throttle 13%
+            "0F": "41",      # IAT 25°C
+            "10": "00 A0",   # MAF 1.60 g/s (lower than corolla — sensor degrading)
+            "06": "92",      # STFT B1 +14%
+            "07": "9A",      # LTFT B1 +20%
+            "14": "24 FF",   # O2 S1 0.18V (lean)
+            "15": "88 FF",   # O2 S2 0.68V
+            "42": "30 70",   # Battery 12.4V
+        },
+        "freeze_frame": {
+            "dtc": "P0171",
+            "pids": {
+                "0C": "0C 58",   # RPM 790
+                "05": "7D",      # Coolant 85°C
+                "04": "42",      # Load 26%
+                "0D": "00",
+                "10": "00 78",   # MAF 1.20 g/s (very low at fault set)
+                "07": "9A",      # LTFT B1 +20%
+            },
+        },
+    },
+
+    # ── P0300 + P0171 — random misfire from fuel starvation ──────────────────
+    "misfire_fuel": {
+        "name": f"{_NAME} — P0300+P0171 random misfire (fuel starvation)",
+        "vin":  _VIN,
+        "confirmed_dtcs": ["P0300", "P0171"],
+        "pending_dtcs":   ["P0300", "P0171"],
+        "permanent_dtcs": ["P0300"],
+        "pids": {
+            "0C": "0B 18",   # RPM 710 (rough — multiple cylinders affected)
+            "05": "81",      # Coolant 89°C
+            "04": "3D",      # Load 24%
+            "0D": "00",      # Speed 0
+            "11": "20",      # Throttle 13%
+            "0F": "41",      # IAT 25°C
+            "10": "00 8C",   # MAF 1.40 g/s (very low — starved)
+            "06": "94",      # STFT B1 +16%
+            "07": "9C",      # LTFT B1 +22%
+            "14": "24 FF",   # O2 S1 0.18V (very lean)
+            "15": "82 FF",   # O2 S2 0.65V
+            "42": "30 D4",   # Battery 12.5V
+        },
+        "freeze_frame": {
+            "dtc": "P0300",
+            "pids": {
+                "0C": "0B 18",   # RPM 710
+                "05": "81",      # Coolant 89°C
+                "04": "4C",      # Load 30%
+                "0D": "00",
+                "10": "00 8C",   # MAF 1.40 g/s
+                "07": "9C",      # LTFT B1 +22%
+            },
+        },
+    },
+
+    # ── P0420 — catalyst efficiency below threshold ───────────────────────────
+    "catalyst": {
+        "name": f"{_NAME} — P0420 catalytic converter degraded",
+        "vin":  _VIN,
+        "confirmed_dtcs": ["P0420"],
+        "pending_dtcs":   [],
+        "permanent_dtcs": ["P0420"],
+        "pids": {
+            "0C": "0C 80",   # RPM 800 (normal idle — no obvious symptoms)
+            "05": "7E",      # Coolant 86°C
+            "04": "33",      # Load 20%
+            "0D": "00",      # Speed 0
+            "11": "22",      # Throttle 13%
+            "0F": "41",      # IAT 25°C
+            "10": "01 54",   # MAF 3.40 g/s (normal)
+            "06": "83",      # STFT B1 +2% (normal)
+            "07": "84",      # LTFT B1 +3% (normal)
+            "14": "5A FF",   # O2 S1 0.45V (switching normally upstream)
+            "15": "50 FF",   # O2 S2 0.40V (should be ~0.1V if cat working — high = degraded)
+            "42": "30 D4",   # Battery 12.5V
+        },
+        "freeze_frame": {
+            "dtc": "P0420",
+            "pids": {
+                "0C": "0C 80",   # RPM 800
+                "05": "7E",      # Coolant 86°C
+                "04": "33",      # Load 20%
+                "0D": "00",
+                "14": "5A FF",   # O2 S1 0.45V
+                "15": "50 FF",   # O2 S2 0.40V (not converting)
+            },
+        },
+    },
+
+    # ── P0507 — idle too high, vacuum leak ────────────────────────────────────
+    "idle_high": {
+        "name": f"{_NAME} — P0507 idle too high (vacuum leak)",
+        "vin":  _VIN,
+        "confirmed_dtcs": ["P0507"],
+        "pending_dtcs":   ["P0507"],
+        "permanent_dtcs": [],
+        "pids": {
+            "0C": "11 F8",   # RPM 1150 (should be ~750-800)
+            "05": "7D",      # Coolant 85°C
+            "04": "24",      # Load 14% (low — unloaded engine at high idle)
+            "0D": "00",      # Speed 0
+            "11": "1F",      # Throttle 12%
+            "0F": "41",      # IAT 25°C
+            "10": "01 40",   # MAF 3.20 g/s (high for idle — extra unmetered air)
+            "06": "78",      # STFT B1 -6% (ECU cutting fuel for excess air)
+            "07": "7B",      # LTFT B1 -4%
+            "14": "46 FF",   # O2 S1 0.35V (slightly lean)
+            "15": "6E FF",   # O2 S2 0.55V
+            "42": "30 D4",   # Battery 12.5V
+        },
+        "freeze_frame": {
+            "dtc": "P0507",
+            "pids": {
+                "0C": "11 F8",   # RPM 1150
+                "05": "7D",      # Coolant 85°C
+                "04": "24",      # Load 14%
+                "0D": "00",
+                "06": "78",      # STFT -6%
+                "07": "7B",      # LTFT -4%
+            },
+        },
+    },
+
+    # ── P0401 — EGR flow insufficient ────────────────────────────────────────
+    "egr": {
+        "name": f"{_NAME} — P0401 EGR flow insufficient",
+        "vin":  _VIN,
+        "confirmed_dtcs": ["P0401"],
+        "pending_dtcs":   [],
+        "permanent_dtcs": ["P0401"],
+        "pids": {
+            "0C": "0C 08",   # RPM 770
+            "05": "84",      # Coolant 92°C (slightly high — no EGR cooling combustion)
+            "04": "30",      # Load 19%
+            "0D": "00",      # Speed 0
+            "11": "20",      # Throttle 13%
+            "0F": "41",      # IAT 25°C
+            "10": "01 18",   # MAF 2.80 g/s
+            "06": "89",      # STFT B1 +7%
+            "07": "8C",      # LTFT B1 +9%
+            "14": "4C FF",   # O2 S1 0.38V
+            "15": "78 FF",   # O2 S2 0.60V
+            "42": "30 D4",   # Battery 12.5V
+        },
+        "freeze_frame": {
+            "dtc": "P0401",
+            "pids": {
+                "0C": "0C 08",   # RPM 770
+                "05": "84",      # Coolant 92°C
+                "04": "30",      # Load 19%
+                "0D": "00",
+                "10": "01 18",   # MAF 2.80 g/s
+                "07": "8C",      # LTFT +9%
             },
         },
     },
