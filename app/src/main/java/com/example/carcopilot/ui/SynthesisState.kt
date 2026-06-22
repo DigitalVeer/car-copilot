@@ -3,8 +3,6 @@ package com.example.carcopilot.ui
 import android.util.Log
 import com.example.carcopilot.model.FALLBACK_GOOD_NEWS_MISFIRE
 import com.example.carcopilot.model.FALLBACK_SYNTHESIS_MISFIRE
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 sealed interface SynthesisState {
@@ -16,8 +14,6 @@ sealed interface SynthesisState {
         val isFallback: Boolean,
     ) : SynthesisState
 }
-
-private val tolerantJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
 /**
  * Result of scanning a partial streaming buffer for the in-progress
@@ -32,46 +28,13 @@ data class SynthesisProgress(val partial: String, val complete: Boolean)
  * JSON buffer. Used during streaming to show only the synthesis text in
  * the AI strip — not the raw `{"synthesis": "..."` envelope.
  *
- * Returns an empty partial until the opener `"synthesis": "` has been
- * seen. Past the opener, walks the buffer character by character and
- * decodes JSON string escapes incrementally so the displayed text never
- * contains a stray backslash or half-finished `\u` escape.
+ * Delegates to the shared [extractJsonStringField] (escape-aware,
+ * incremental). Behavior is identical to the hand-rolled scanner this surface
+ * shipped through Phase 5; only the implementation is now shared so a fix
+ * can't drift between surfaces.
  */
-fun extractSynthesisInProgress(buffer: String): SynthesisProgress {
-    val match = SYNTHESIS_OPENER.find(buffer) ?: return SynthesisProgress("", false)
-    val sb = StringBuilder()
-    var i = match.range.last + 1
-    while (i < buffer.length) {
-        val c = buffer[i]
-        when {
-            c == '\\' -> {
-                if (i + 1 >= buffer.length) break  // wait for the escape char
-                when (val esc = buffer[i + 1]) {
-                    '"' -> sb.append('"').also { i += 2 }
-                    '\\' -> sb.append('\\').also { i += 2 }
-                    '/' -> sb.append('/').also { i += 2 }
-                    'n' -> sb.append('\n').also { i += 2 }
-                    't' -> sb.append('\t').also { i += 2 }
-                    'r' -> sb.append('\r').also { i += 2 }
-                    'b' -> sb.append('\b').also { i += 2 }
-                    'f' -> sb.append('\u000C').also { i += 2 }
-                    'u' -> {
-                        if (i + 6 > buffer.length) return SynthesisProgress(sb.toString(), false)
-                        val cp = buffer.substring(i + 2, i + 6).toIntOrNull(16)
-                            ?: return SynthesisProgress(sb.toString(), false)
-                        sb.append(cp.toChar()); i += 6
-                    }
-                    else -> { sb.append(esc); i += 2 }
-                }
-            }
-            c == '"' -> return SynthesisProgress(sb.toString(), true)
-            else -> { sb.append(c); i++ }
-        }
-    }
-    return SynthesisProgress(sb.toString(), false)
-}
-
-private val SYNTHESIS_OPENER = Regex("\"synthesis\"\\s*:\\s*\"")
+fun extractSynthesisInProgress(buffer: String): SynthesisProgress =
+    extractJsonStringField(buffer, "synthesis").let { SynthesisProgress(it.partial, it.complete) }
 
 /**
  * Parse the assembled Gemma response (post-streaming) into a Ready state, or
@@ -79,7 +42,7 @@ private val SYNTHESIS_OPENER = Regex("\"synthesis\"\\s*:\\s*\"")
  * GemmaSmokeTest + gemma_adapter.py.
  */
 fun parseOrFallback(assembled: String): SynthesisState.Ready {
-    val parsed = tolerantParse(assembled)
+    val parsed = parseTolerantJsonObject(assembled)
     if (parsed == null) {
         Log.w("Synthesis", "parse failed; using fallback")
         return SynthesisState.Ready(
@@ -96,19 +59,4 @@ fun parseOrFallback(assembled: String): SynthesisState.Ready {
         )
     val goodNews = parsed["good_news"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
     return SynthesisState.Ready(synthesis = synthesis, goodNews = goodNews, isFallback = false)
-}
-
-private fun tolerantParse(text: String): JsonObject? {
-    var s = text.trim()
-    s = s.replace(Regex("```\\s*json\\s*", RegexOption.IGNORE_CASE), "")
-    s = s.replace("```", "")
-    s = s.trim()
-    val first = s.indexOf('{')
-    val last = s.lastIndexOf('}')
-    if (first == -1 || last == -1 || last <= first) return null
-    return try {
-        tolerantJson.parseToJsonElement(s.substring(first, last + 1)) as? JsonObject
-    } catch (_: Exception) {
-        null
-    }
 }

@@ -1,12 +1,9 @@
 package com.example.carcopilot.ui
 
 import android.util.Log
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -21,15 +18,13 @@ sealed interface WalkthroughPlanState {
 
     /**
      * Plan is still streaming. [stepsSeen] counts complete `{...}` objects
-     * spotted inside the `steps` array so the loading state can rende
+     * spotted inside the `steps` array so the loading state can render
      * "Building plan… 2 of 3 steps so far" without parsing every partial title.
      */
     data class Streaming(val stepsSeen: Int) : WalkthroughPlanState
 
     data class Ready(val steps: List<PlanStep>, val isFallback: Boolean) : WalkthroughPlanState
 }
-
-private val tolerantPlanJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
 /**
  * Progress snapshot for a partially-streamed plan envelope.
@@ -47,16 +42,12 @@ data class WalkthroughPlanProgress(val stepsSeen: Int, val complete: Boolean)
 /**
  * Walk a partial plan buffer counting complete step objects in `"steps": [...]`.
  *
- * Structurally parallel to [extractSynthesisInProgress] in role (live view of a
- * still-streaming JSON envelope) but with array-aware semantics — the plan
- * payload is an array of objects, not a single string field. Intentionally
- * duplicated rather than generalized: the single-string extractors stay simple
- * and Phase-5-locked, this one carries its own brace tracker.
- *
- * The scanner is string-aware (won't be fooled by `"}"` inside a title o
- * brief) and escape-aware (won't be fooled by `\"`). Defensive against
- * a buffer that ends in the middle of an escape, the middle of a string,
- * or the middle of an object.
+ * Unlike the single-string surfaces (which share [extractJsonStringField]),
+ * the plan payload is an array of objects, so this carries its own
+ * array-aware brace tracker. The scanner is string-aware (won't be fooled by
+ * `"}"` inside a title or brief) and escape-aware (won't be fooled by `\"`).
+ * Defensive against a buffer that ends in the middle of an escape, the middle
+ * of a string, or the middle of an object.
  */
 fun extractWalkthroughPlanInProgress(buffer: String): WalkthroughPlanProgress {
     val arrayStart = STEPS_OPENER.find(buffer)?.range?.last?.plus(1)
@@ -97,19 +88,19 @@ private val STEPS_OPENER = Regex("\"steps\"\\s*:\\s*\\[")
 
 /**
  * Parse the assembled plan envelope into a Ready state, or fall back if the
- * JSON can't be recovered. Mirrors [parseOrFallback]'s tolerant-parse +
- * markdown-strip shape; the caller supplies the canned fallback derived from
+ * JSON can't be recovered. Uses the shared [parseTolerantJsonObject] (markdown
+ * strip + tail balancing); the caller supplies the canned fallback derived from
  * [com.example.carcopilot.data.DTCEntry.walkthroughSteps].
  *
  * A pattern is considered valid only when every step object has all three
- * fields (number, title, brief) non-blank. Partial schemas fall back rathe
+ * fields (number, title, brief) non-blank. Partial schemas fall back rather
  * than show a half-built plan — the failure mode that does the least damage.
  */
 fun parseWalkthroughPlanOrFallback(
     assembled: String,
     fallback: List<PlanStep>,
 ): WalkthroughPlanState.Ready {
-    val parsed = tolerantPlanParse(assembled)
+    val parsed = parseTolerantJsonObject(assembled)
     if (parsed == null) {
         Log.w("WalkthroughPlan", "parse failed; using fallback")
         return WalkthroughPlanState.Ready(steps = fallback, isFallback = true)
@@ -133,81 +124,4 @@ fun parseWalkthroughPlanOrFallback(
         steps.add(PlanStep(number = number, title = title.trim(), brief = brief.trim()))
     }
     return WalkthroughPlanState.Ready(steps = steps, isFallback = false)
-}
-
-private fun tolerantPlanParse(text: String): JsonObject? {
-    var s = text.trim()
-    s = s.replace(Regex("```\\s*json\\s*", RegexOption.IGNORE_CASE), "")
-    s = s.replace("```", "")
-    s = s.trim()
-    val first = s.indexOf('{')
-    if (first == -1) return null
-    val balanced = balanceJsonTail(s, first) ?: return null
-    return try {
-        tolerantPlanJson.parseToJsonElement(balanced) as? JsonObject
-    } catch (_: Exception) {
-        null
-    }
-}
-
-/**
- * Walk [text] from [startAt] tracking string boundaries and brace/bracket
- * depth, returning the substring with any unclosed structure closed at the
- * tail. Handles three real-world Gemma output shapes we hit on device:
- *
- * - Output ends with `}]` (closed last step + closed steps array) but no
- *   outer `}` — observed on the P0301 plan run, parse used to fail because
- *   `s.lastIndexOf('}')` cropped off the trailing `]` too.
- * - Output ends mid-string when generation is cancelled — close the string
- *   before closing structural braces so the JSON parser sees a valid value.
- * - Output ends with a trailing comma inside an object/array — strip it
- *   before closing or the parser rejects the dangling separator.
- *
- * Returns null when the input from [startAt] is empty (caller treats as no
- * recoverable JSON). Returns the input unchanged when it was already balanced.
- */
-internal fun balanceJsonTail(text: String, startAt: Int): String? {
-    if (startAt >= text.length) return null
-    val sb = StringBuilder()
-    var inString = false
-    var escape = false
-    val closers = ArrayDeque<Char>()
-    var i = startAt
-    while (i < text.length) {
-        val c = text[i]
-        sb.append(c)
-        if (inString) {
-            when {
-                escape -> escape = false
-                c == '\\' -> escape = true
-                c == '"' -> inString = false
-            }
-        } else {
-            when (c) {
-                '"' -> inString = true
-                '{' -> closers.addLast('}')
-                '[' -> closers.addLast(']')
-                '}' -> if (closers.lastOrNull() == '}') closers.removeLast()
-                ']' -> if (closers.lastOrNull() == ']') closers.removeLast()
-            }
-        }
-        i++
-    }
-    if (sb.isEmpty()) return null
-    // Mid-escape at EOF: drop the orphan backslash so the close-quote below
-    // doesn't accidentally extend an escape sequence.
-    if (escape && sb.isNotEmpty() && sb.last() == '\\') sb.deleteCharAt(sb.length - 1)
-    // Close an open string before touching structural braces, otherwise a
-    // dangling `, "title": "Star` becomes invalid JSON the moment we try
-    // to append `]` or `}`.
-    if (inString) sb.append('"')
-    // Drop a trailing structural comma (and any whitespace after it). Only
-    // strip what's outside a string — we already closed any open string.
-    while (sb.isNotEmpty() && sb.last().isWhitespace()) sb.deleteCharAt(sb.length - 1)
-    if (sb.isNotEmpty() && sb.last() == ',') {
-        sb.deleteCharAt(sb.length - 1)
-        while (sb.isNotEmpty() && sb.last().isWhitespace()) sb.deleteCharAt(sb.length - 1)
-    }
-    while (closers.isNotEmpty()) sb.append(closers.removeLast())
-    return sb.toString()
 }
