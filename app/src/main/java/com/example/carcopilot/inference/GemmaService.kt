@@ -90,6 +90,29 @@ private val STEP_NUMERIC_FIDELITY_SAMPLER =
     SamplerConfig(topK = 40, topP = 0.5, temperature = 0.1)
 
 /**
+ * MTP-acceptance-tuned sampler for the informational narrative surfaces
+ * (mechanic draft, history pattern, walkthrough plan).
+ *
+ * Speculative decoding (MTP) accepts a drafted token only when the target
+ * model would have produced it; a wide sampler makes the target sample more
+ * randomly, rejecting more drafts and shrinking the decode speedup. perf_notes
+ * 2026-05-18 flagged the default top-p 0.95 as the likely reason MTP landed at
+ * +23–60% rather than the >2× headline. Pulling top-p to 0.9 and temperature
+ * to 0.2 peaks the target distribution → higher draft acceptance → faster
+ * decode, while staying far looser than the numeric-fidelity sampler so these
+ * surfaces keep their conversational latitude.
+ *
+ * Deliberately NOT applied to [streamSynthesis]: the Issue page is the
+ * wow-moment voice surface and stays on [DEFAULT_SAMPLER]'s wider settings.
+ * The draft is a factual note to a shop and the history pattern is an
+ * explanatory paragraph — both tolerate the tighter distribution with no
+ * meaningful loss of warmth. Output change is real but small; confirm the
+ * voice on device alongside the per-surface `bench … decode_tps` delta before
+ * extending it to synthesis.
+ */
+private val MTP_NARRATIVE_SAMPLER = SamplerConfig(topK = 40, topP = 0.9, temperature = 0.2)
+
+/**
  * Prewarm user message used by [GemmaService.prewarmJob]. Designed as a
  * one-shot voice + shape anchor for the synthesis surface: it shows one
  * compact synthesis input alongside the ideal JSON output, then asks for
@@ -171,6 +194,14 @@ class GemmaService(
             }
             ExperimentalFlags.enableSpeculativeDecoding = if (mtpSupported) true else null
             Log.i(METRIC_TAG, "mtp model=${BuildConfig.MODEL_VARIANT} enabled=$mtpSupported")
+            // Silent-off guard: when the staged .litertlm has no draft head the
+            // flag falls back to the model default (off) and every surface
+            // decodes at the unaccelerated rate with no error — the failure mode
+            // is invisible without this line. Re-stage an MTP-enabled Gemma 4
+            // build if this fires on a release where speedup is expected.
+            if (!mtpSupported) {
+                Log.w(TAG, "MTP unavailable for ${BuildConfig.MODEL_VARIANT}: model carries no draft head; decode runs unaccelerated")
+            }
             // Enable Conversation.getBenchmarkInfo(). Surfaces SDK-authoritative
             // init time, time-to-first-token, prefill/decode token counts, and
             // prefill/decode TPS — gives us a real answer to the "is the
@@ -271,7 +302,9 @@ class GemmaService(
      * the user navigates here in a session.
      */
     fun streamMechanicDraft(issue: Issue): Flow<String> =
-        streamSurface("draft") { promptBuilder.renderMechanicDraftPrompt(issue) }
+        streamSurface("draft", sampler = MTP_NARRATIVE_SAMPLER) {
+            promptBuilder.renderMechanicDraftPrompt(issue)
+        }
 
     /**
      * Streams the history-pattern assistant response as per-token deltas,
@@ -285,7 +318,9 @@ class GemmaService(
      * the user opens History in a session.
      */
     fun streamHistoryPattern(history: List<HistoryEntry>, currentIssue: Issue?): Flow<String> =
-        streamSurface("history") { promptBuilder.renderHistoryPatternPrompt(history, currentIssue) }
+        streamSurface("history", sampler = MTP_NARRATIVE_SAMPLER) {
+            promptBuilder.renderHistoryPatternPrompt(history, currentIssue)
+        }
 
     /**
      * Streams the walkthrough plan envelope as per-token deltas. The caller
@@ -302,7 +337,11 @@ class GemmaService(
      * distinguishes the two phases for performance triage.
      */
     fun streamWalkthroughPlan(issue: Issue): Flow<String> =
-        streamSurface(surface = "walkthrough", metricLabel = "walkthrough_plan") {
+        streamSurface(
+            surface = "walkthrough",
+            metricLabel = "walkthrough_plan",
+            sampler = MTP_NARRATIVE_SAMPLER,
+        ) {
             promptBuilder.renderWalkthroughPlanPrompt(issue)
         }
 
