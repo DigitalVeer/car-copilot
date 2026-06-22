@@ -90,6 +90,29 @@ private val STEP_NUMERIC_FIDELITY_SAMPLER =
     SamplerConfig(topK = 40, topP = 0.5, temperature = 0.1)
 
 /**
+ * MTP-acceptance-tuned sampler for the informational narrative surfaces
+ * (mechanic draft, history pattern, walkthrough plan).
+ *
+ * Speculative decoding (MTP) accepts a drafted token only when the target
+ * model would have produced it; a wide sampler makes the target sample more
+ * randomly, rejecting more drafts and shrinking the decode speedup. perf_notes
+ * 2026-05-18 flagged the default top-p 0.95 as the likely reason MTP landed at
+ * +23–60% rather than the >2× headline. Pulling top-p to 0.9 and temperature
+ * to 0.2 peaks the target distribution → higher draft acceptance → faster
+ * decode, while staying far looser than the numeric-fidelity sampler so these
+ * surfaces keep their conversational latitude.
+ *
+ * Deliberately NOT applied to [streamSynthesis]: the Issue page is the
+ * wow-moment voice surface and stays on [DEFAULT_SAMPLER]'s wider settings.
+ * The draft is a factual note to a shop and the history pattern is an
+ * explanatory paragraph — both tolerate the tighter distribution with no
+ * meaningful loss of warmth. Output change is real but small; confirm the
+ * voice on device alongside the per-surface `bench … decode_tps` delta before
+ * extending it to synthesis.
+ */
+private val MTP_NARRATIVE_SAMPLER = SamplerConfig(topK = 40, topP = 0.9, temperature = 0.2)
+
+/**
  * Prewarm user message used by [GemmaService.prewarmJob]. Designed as a
  * one-shot voice + shape anchor for the synthesis surface: it shows one
  * compact synthesis input alongside the ideal JSON output, then asks for
@@ -171,6 +194,14 @@ class GemmaService(
             }
             ExperimentalFlags.enableSpeculativeDecoding = if (mtpSupported) true else null
             Log.i(METRIC_TAG, "mtp model=${BuildConfig.MODEL_VARIANT} enabled=$mtpSupported")
+            // Silent-off guard: when the staged .litertlm has no draft head the
+            // flag falls back to the model default (off) and every surface
+            // decodes at the unaccelerated rate with no error — the failure mode
+            // is invisible without this line. Re-stage an MTP-enabled Gemma 4
+            // build if this fires on a release where speedup is expected.
+            if (!mtpSupported) {
+                Log.w(TAG, "MTP unavailable for ${BuildConfig.MODEL_VARIANT}: model carries no draft head; decode runs unaccelerated")
+            }
             // Enable Conversation.getBenchmarkInfo(). Surfaces SDK-authoritative
             // init time, time-to-first-token, prefill/decode token counts, and
             // prefill/decode TPS — gives us a real answer to the "is the
@@ -256,70 +287,8 @@ class GemmaService(
      * closed and nulled so the next call rebuilds it (preserving the Phase 5
      * resilience contract).
      */
-    fun streamSynthesis(issue: Issue, classification: Classification? = null): Flow<String> = flow {
-        if (engine == null) {
-            Log.w(TAG, "streamSynthesis: engine not initialized; emitting empty")
-            return@flow
-        }
-        convoMutex.withLock {
-            val convo = acquireConversationForSurfaceLocked("synthesis") ?: run {
-                Log.w(TAG, "streamSynthesis: conversation creation failed; emitting empty")
-                return@withLock
-            }
-            // Phase 8 instrumentation — model=…, first_token=…ms, total=…ms, tokens=…, tps=…
-            val sendStart = System.nanoTime()
-            var firstTokenNs: Long = -1
-            var tokenCount = 0
-            val rawBuf = StringBuilder()
-            var failed = false
-            try {
-                convo.sendMessageAsync(promptBuilder.renderSynthesisPrompt(issue, classification))
-                    .collect { message ->
-                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
-                        tokenCount += 1
-                        val s = message.toString()
-                        rawBuf.append(s)
-                        emit(s)
-                    }
-            } catch (t: Throwable) {
-                failed = true
-                Log.w(TAG, "streamSynthesis collect: ${t.javaClass.simpleName}: ${t.message}")
-                // Reset hoisted Conversation — it may be in a bad state. Wrapped
-                // in NonCancellable so a propagating CancellationException can't
-                // skip cancelProcess/close/timestamp, and the next surface acquire
-                // can safely wait NATIVE_SETTLE_MS from lastCloseNs.
-                withContext(NonCancellable) {
-                    try { convo.cancelProcess() } catch (_: Throwable) {}
-                    try { convo.close() } catch (_: Throwable) {}
-                    conversation = null
-                    currentSurface = null
-                    lastCloseNs = System.nanoTime()
-                }
-                throw t
-            } finally {
-                val totalMs = (System.nanoTime() - sendStart) / 1_000_000
-                val firstMs = if (firstTokenNs > 0) (firstTokenNs - sendStart) / 1_000_000 else -1L
-                val steadyTokens = (tokenCount - 1).coerceAtLeast(0)
-                val steadyMs = (totalMs - firstMs).coerceAtLeast(1)
-                val tps = if (steadyTokens > 0) steadyTokens * 1000.0 / steadyMs else 0.0
-                Log.i(
-                    METRIC_TAG,
-                    "infer surface=synthesis model=${BuildConfig.MODEL_VARIANT} " +
-                        "first_token=${firstMs}ms total=${totalMs}ms tokens=$tokenCount " +
-                        "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
-                )
-                if (!failed) {
-                    logBenchmarkInfo("synthesis", convo)
-                    Log.i(
-                        METRIC_TAG,
-                        "infer_raw surface=synthesis model=${BuildConfig.MODEL_VARIANT} text=${
-                            rawBuf.toString().replace("\n", "\\n").replace("\r", "")
-                        }"
-                    )
-                }
-            }
-        }
-    }.flowOn(Dispatchers.IO)
+    fun streamSynthesis(issue: Issue, classification: Classification? = null): Flow<String> =
+        streamSurface("synthesis") { promptBuilder.renderSynthesisPrompt(issue, classification) }
 
     /**
      * Streams the mechanic-draft assistant response as per-token deltas,
@@ -332,65 +301,10 @@ class GemmaService(
      * latency therefore includes a cold system-prompt prefill the first time
      * the user navigates here in a session.
      */
-    fun streamMechanicDraft(issue: Issue): Flow<String> = flow {
-        if (engine == null) {
-            Log.w(TAG, "streamMechanicDraft: engine not initialized; emitting empty")
-            return@flow
+    fun streamMechanicDraft(issue: Issue): Flow<String> =
+        streamSurface("draft", sampler = MTP_NARRATIVE_SAMPLER) {
+            promptBuilder.renderMechanicDraftPrompt(issue)
         }
-        convoMutex.withLock {
-            val convo = acquireConversationForSurfaceLocked("draft") ?: run {
-                Log.w(TAG, "streamMechanicDraft: conversation creation failed; emitting empty")
-                return@withLock
-            }
-            val sendStart = System.nanoTime()
-            var firstTokenNs: Long = -1
-            var tokenCount = 0
-            val rawBuf = StringBuilder()
-            var failed = false
-            try {
-                convo.sendMessageAsync(promptBuilder.renderMechanicDraftPrompt(issue))
-                    .collect { message ->
-                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
-                        tokenCount += 1
-                        val s = message.toString()
-                        rawBuf.append(s)
-                        emit(s)
-                    }
-            } catch (t: Throwable) {
-                failed = true
-                Log.w(TAG, "streamMechanicDraft collect: ${t.javaClass.simpleName}: ${t.message}")
-                withContext(NonCancellable) {
-                    try { convo.cancelProcess() } catch (_: Throwable) {}
-                    try { convo.close() } catch (_: Throwable) {}
-                    conversation = null
-                    currentSurface = null
-                    lastCloseNs = System.nanoTime()
-                }
-                throw t
-            } finally {
-                val totalMs = (System.nanoTime() - sendStart) / 1_000_000
-                val firstMs = if (firstTokenNs > 0) (firstTokenNs - sendStart) / 1_000_000 else -1L
-                val steadyTokens = (tokenCount - 1).coerceAtLeast(0)
-                val steadyMs = (totalMs - firstMs).coerceAtLeast(1)
-                val tps = if (steadyTokens > 0) steadyTokens * 1000.0 / steadyMs else 0.0
-                Log.i(
-                    METRIC_TAG,
-                    "infer surface=draft model=${BuildConfig.MODEL_VARIANT} " +
-                        "first_token=${firstMs}ms total=${totalMs}ms tokens=$tokenCount " +
-                        "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
-                )
-                if (!failed) {
-                    logBenchmarkInfo("draft", convo)
-                    Log.i(
-                        METRIC_TAG,
-                        "infer_raw surface=draft model=${BuildConfig.MODEL_VARIANT} text=${
-                            rawBuf.toString().replace("\n", "\\n").replace("\r", "")
-                        }"
-                    )
-                }
-            }
-        }
-    }.flowOn(Dispatchers.IO)
 
     /**
      * Streams the history-pattern assistant response as per-token deltas,
@@ -403,65 +317,10 @@ class GemmaService(
      * latency therefore includes a cold system-prompt prefill the first time
      * the user opens History in a session.
      */
-    fun streamHistoryPattern(history: List<HistoryEntry>, currentIssue: Issue?): Flow<String> = flow {
-        if (engine == null) {
-            Log.w(TAG, "streamHistoryPattern: engine not initialized; emitting empty")
-            return@flow
+    fun streamHistoryPattern(history: List<HistoryEntry>, currentIssue: Issue?): Flow<String> =
+        streamSurface("history", sampler = MTP_NARRATIVE_SAMPLER) {
+            promptBuilder.renderHistoryPatternPrompt(history, currentIssue)
         }
-        convoMutex.withLock {
-            val convo = acquireConversationForSurfaceLocked("history") ?: run {
-                Log.w(TAG, "streamHistoryPattern: conversation creation failed; emitting empty")
-                return@withLock
-            }
-            val sendStart = System.nanoTime()
-            var firstTokenNs: Long = -1
-            var tokenCount = 0
-            val rawBuf = StringBuilder()
-            var failed = false
-            try {
-                convo.sendMessageAsync(promptBuilder.renderHistoryPatternPrompt(history, currentIssue))
-                    .collect { message ->
-                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
-                        tokenCount += 1
-                        val s = message.toString()
-                        rawBuf.append(s)
-                        emit(s)
-                    }
-            } catch (t: Throwable) {
-                failed = true
-                Log.w(TAG, "streamHistoryPattern collect: ${t.javaClass.simpleName}: ${t.message}")
-                withContext(NonCancellable) {
-                    try { convo.cancelProcess() } catch (_: Throwable) {}
-                    try { convo.close() } catch (_: Throwable) {}
-                    conversation = null
-                    currentSurface = null
-                    lastCloseNs = System.nanoTime()
-                }
-                throw t
-            } finally {
-                val totalMs = (System.nanoTime() - sendStart) / 1_000_000
-                val firstMs = if (firstTokenNs > 0) (firstTokenNs - sendStart) / 1_000_000 else -1L
-                val steadyTokens = (tokenCount - 1).coerceAtLeast(0)
-                val steadyMs = (totalMs - firstMs).coerceAtLeast(1)
-                val tps = if (steadyTokens > 0) steadyTokens * 1000.0 / steadyMs else 0.0
-                Log.i(
-                    METRIC_TAG,
-                    "infer surface=history model=${BuildConfig.MODEL_VARIANT} " +
-                        "first_token=${firstMs}ms total=${totalMs}ms tokens=$tokenCount " +
-                        "tps=${"%.2f".format(tps)}" + (if (failed) " failed=true" else "")
-                )
-                if (!failed) {
-                    logBenchmarkInfo("history", convo)
-                    Log.i(
-                        METRIC_TAG,
-                        "infer_raw surface=history model=${BuildConfig.MODEL_VARIANT} text=${
-                            rawBuf.toString().replace("\n", "\\n").replace("\r", "")
-                        }"
-                    )
-                }
-            }
-        }
-    }.flowOn(Dispatchers.IO)
 
     /**
      * Streams the walkthrough plan envelope as per-token deltas. The caller
@@ -477,54 +336,14 @@ class GemmaService(
      * coherent with what the user is already looking at. Metric label
      * distinguishes the two phases for performance triage.
      */
-    fun streamWalkthroughPlan(issue: Issue): Flow<String> = flow {
-        if (engine == null) {
-            Log.w(TAG, "streamWalkthroughPlan: engine not initialized; emitting empty")
-            return@flow
+    fun streamWalkthroughPlan(issue: Issue): Flow<String> =
+        streamSurface(
+            surface = "walkthrough",
+            metricLabel = "walkthrough_plan",
+            sampler = MTP_NARRATIVE_SAMPLER,
+        ) {
+            promptBuilder.renderWalkthroughPlanPrompt(issue)
         }
-        convoMutex.withLock {
-            val convo = acquireConversationForSurfaceLocked("walkthrough") ?: run {
-                Log.w(TAG, "streamWalkthroughPlan: conversation creation failed; emitting empty")
-                return@withLock
-            }
-            val sendStart = System.nanoTime()
-            var firstTokenNs: Long = -1
-            var tokenCount = 0
-            val rawBuf = StringBuilder()
-            var failed = false
-            try {
-                convo.sendMessageAsync(promptBuilder.renderWalkthroughPlanPrompt(issue))
-                    .collect { message ->
-                        if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
-                        tokenCount += 1
-                        val s = message.toString()
-                        rawBuf.append(s)
-                        emit(s)
-                    }
-            } catch (t: Throwable) {
-                failed = true
-                Log.w(TAG, "streamWalkthroughPlan collect: ${t.javaClass.simpleName}: ${t.message}")
-                withContext(NonCancellable) {
-                    try { convo.cancelProcess() } catch (_: Throwable) {}
-                    try { convo.close() } catch (_: Throwable) {}
-                    conversation = null
-                    currentSurface = null
-                    lastCloseNs = System.nanoTime()
-                }
-                throw t
-            } finally {
-                logSurfaceMetrics(
-                    surfaceLabel = "walkthrough_plan",
-                    sendStart = sendStart,
-                    firstTokenNs = firstTokenNs,
-                    tokenCount = tokenCount,
-                    rawBuf = rawBuf,
-                    failed = failed,
-                )
-                if (!failed) logBenchmarkInfo("walkthrough_plan", convo)
-            }
-        }
-    }.flowOn(Dispatchers.IO)
 
     /**
      * Streams the body for a single walkthrough step as per-token deltas.
@@ -551,27 +370,55 @@ class GemmaService(
         issue: Issue,
         planStep: PlanStep,
         totalSteps: Int,
+    ): Flow<String> =
+        streamSurface(
+            surface = "walkthrough_step_${planStep.number}",
+            sampler = STEP_NUMERIC_FIDELITY_SAMPLER,
+        ) {
+            promptBuilder.renderWalkthroughStepPrompt(issue, planStep, totalSteps)
+        }
+
+    /**
+     * The one streaming path behind every public `stream*` surface. Each
+     * surface differs only in three axes: the KV-cache [surface] tag, the
+     * [sampler], and the [buildPrompt] lambda; everything else — the engine
+     * guard, the [convoMutex] serialization, the per-token instrumentation,
+     * the SIGSEGV-mitigation reset on failure (NonCancellable cancel + close +
+     * NATIVE_SETTLE_MS stamp), and the metric/benchmark logging — is identical
+     * and now lives here once.
+     *
+     * [metricLabel] defaults to [surface] but is split out for the walkthrough
+     * plan, whose KV-cache tag is `walkthrough` (shared with steps for cache
+     * locality) while its metric line reads `walkthrough_plan`.
+     *
+     * On error the Conversation is closed and nulled so the next call rebuilds
+     * it, preserving the Phase-5 resilience contract: the flow rethrows, the
+     * caller's collector sees the failure, and its empty/partial buffer falls
+     * back to canned text.
+     */
+    private fun streamSurface(
+        surface: String,
+        metricLabel: String = surface,
+        sampler: SamplerConfig = DEFAULT_SAMPLER,
+        buildPrompt: () -> String,
     ): Flow<String> = flow {
         if (engine == null) {
-            Log.w(TAG, "streamWalkthroughStep: engine not initialized; emitting empty")
+            Log.w(TAG, "stream[$metricLabel]: engine not initialized; emitting empty")
             return@flow
         }
         convoMutex.withLock {
-            val surfaceTag = "walkthrough_step_${planStep.number}"
-            val convo = acquireConversationForSurfaceLocked(
-                surface = surfaceTag,
-                sampler = STEP_NUMERIC_FIDELITY_SAMPLER,
-            ) ?: run {
-                Log.w(TAG, "streamWalkthroughStep: conversation creation failed; emitting empty")
+            val convo = acquireConversationForSurfaceLocked(surface, sampler) ?: run {
+                Log.w(TAG, "stream[$metricLabel]: conversation creation failed; emitting empty")
                 return@withLock
             }
+            // Phase 8 instrumentation — model=…, first_token=…ms, total=…ms, tokens=…, tps=…
             val sendStart = System.nanoTime()
             var firstTokenNs: Long = -1
             var tokenCount = 0
             val rawBuf = StringBuilder()
             var failed = false
             try {
-                convo.sendMessageAsync(promptBuilder.renderWalkthroughStepPrompt(issue, planStep, totalSteps))
+                convo.sendMessageAsync(buildPrompt())
                     .collect { message ->
                         if (firstTokenNs < 0) firstTokenNs = System.nanoTime()
                         tokenCount += 1
@@ -581,7 +428,11 @@ class GemmaService(
                     }
             } catch (t: Throwable) {
                 failed = true
-                Log.w(TAG, "streamWalkthroughStep collect: ${t.javaClass.simpleName}: ${t.message}")
+                Log.w(TAG, "stream[$metricLabel] collect: ${t.javaClass.simpleName}: ${t.message}")
+                // Reset hoisted Conversation — it may be in a bad state. Wrapped
+                // in NonCancellable so a propagating CancellationException can't
+                // skip cancelProcess/close/timestamp, and the next surface acquire
+                // can safely wait NATIVE_SETTLE_MS from lastCloseNs.
                 withContext(NonCancellable) {
                     try { convo.cancelProcess() } catch (_: Throwable) {}
                     try { convo.close() } catch (_: Throwable) {}
@@ -592,14 +443,14 @@ class GemmaService(
                 throw t
             } finally {
                 logSurfaceMetrics(
-                    surfaceLabel = "walkthrough_step_${planStep.number}",
+                    surfaceLabel = metricLabel,
                     sendStart = sendStart,
                     firstTokenNs = firstTokenNs,
                     tokenCount = tokenCount,
                     rawBuf = rawBuf,
                     failed = failed,
                 )
-                if (!failed) logBenchmarkInfo("walkthrough_step_${planStep.number}", convo)
+                if (!failed) logBenchmarkInfo(metricLabel, convo)
             }
         }
     }.flowOn(Dispatchers.IO)
@@ -631,11 +482,11 @@ class GemmaService(
     }
 
     /**
-     * Single-line metric writer shared by the walkthrough plan and step
-     * surfaces. The three Phase-5 surfaces inline this logging for the
-     * Phase-5 lock contract; the new walkthrough methods extract it because
-     * they're not under the same freeze and the duplication was getting
-     * unwieldy two ways.
+     * Single-line metric writer for every surface. Emits the `infer surface=…`
+     * line (first-token / total / steady-state TPS) and, on success, the
+     * `infer_raw surface=…` capture. Called once from [streamSurface]; the
+     * SDK-authoritative `bench surface=…` line is emitted alongside it via
+     * [logBenchmarkInfo].
      */
     private fun logSurfaceMetrics(
         surfaceLabel: String,
