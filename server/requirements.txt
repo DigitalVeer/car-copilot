@@ -1,0 +1,5 @@
+# CAR·COPILOT cloud /diagnose service — thin slice.
+# Python 3.11+.
+anthropic>=0.69
+fastapi>=0.115
+uvicorn[standard]>=0.30
