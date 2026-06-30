@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Car Copilot — Scan Theater (feel prototype)</title>
+<style>
+  /* ---- Design tokens (mirrors reference/carcopilot_mockup_v10_light.html) ---- */
+  :root{
+    --bg:#F5F5F7; --surface:#FFFFFF; --ink:#1D1D1F; --ink-2:#3A3A3C; --muted:#8E8E93;
+    --line:#E5E5EA; --indigo:#6366F1; --indigo-soft:#EEF0FF;
+    --severe:#FF3B30; --severe-soft:#FFECEB;
+    --warn:#FF9500; --warn-soft:#FFF4E5;
+    /* scoped-clear is teal/blue, NEVER the "pass" green that implies a verdict we can't give */
+    --scope:#0A84C2; --scope-soft:#E6F4FB;
+    --teal:#13B5A6; --teal-soft:#E6F7F5;
+    --radius:18px; --radius-sm:12px;
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0e0e12;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:24px 12px 60px}
+
+  .stagebar{width:100%;max-width:880px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .stagebar h1{color:#fff;font-size:15px;font-weight:600;margin:0;letter-spacing:.2px}
+  .stagebar .sub{color:#9a9aa5;font-size:12px;margin-top:2px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .controls select,.controls button{font-family:var(--sans);font-size:12.5px;border-radius:10px;border:1px solid #2c2c34;background:#1b1b22;color:#e7e7ee;padding:8px 10px;cursor:pointer}
+  .controls button.primary{background:var(--indigo);border-color:var(--indigo);color:#fff;font-weight:600}
+  .controls label{color:#9a9aa5;font-size:11px;display:flex;align-items:center;gap:6px}
+
+  /* ---- phone frame ---- */
+  .phone{width:100%;max-width:412px;background:var(--bg);border-radius:40px;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden;border:10px solid #000;position:relative}
+  .screen{height:760px;overflow-y:auto;position:relative;scroll-behavior:smooth}
+  .screen::-webkit-scrollbar{width:0}
+
+  /* ---- top bar ---- */
+  .topbar{position:sticky;top:0;z-index:5;background:rgba(245,245,247,.86);backdrop-filter:saturate(180%) blur(14px);border-bottom:1px solid var(--line);padding:14px 18px 12px}
+  .brand{display:flex;align-items:center;gap:8px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--indigo);box-shadow:0 0 0 4px var(--indigo-soft)}
+  .brand .amber{width:6px;height:6px;border-radius:50%;background:var(--warn);margin-left:-3px}
+  .brand b{font-size:14px;letter-spacing:.3px}
+  .brand .tag{margin-left:auto;font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.8px}
+  .modes{display:flex;gap:6px;margin-top:12px;background:#ECECEF;border-radius:12px;padding:3px}
+  .modes button{flex:1;border:0;background:transparent;border-radius:9px;padding:7px 4px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;font-family:var(--sans)}
+  .modes button.on{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .stance{font-size:11.5px;color:var(--muted);margin-top:8px;padding-left:2px}
+
+  /* ---- copilot line ---- */
+  .copilot{display:flex;gap:11px;align-items:flex-start;padding:16px 18px 6px}
+  .avatar{flex:none;width:30px;height:30px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;position:relative}
+  .avatar svg{width:16px;height:16px}
+  .avatar.think::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--indigo);opacity:.4;animation:pulse 1.3s ease-out infinite}
+  @keyframes pulse{0%{transform:scale(.8);opacity:.5}100%{transform:scale(1.5);opacity:0}}
+  .copilot-text{font-size:16px;line-height:1.42;font-weight:500;color:var(--ink);min-height:46px;letter-spacing:-.1px}
+  .copilot-text .caret{display:inline-block;width:2px;height:1.05em;background:var(--indigo);margin-left:1px;vertical-align:-2px;animation:blink 1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .copilot.fixed .avatar{background:var(--severe)}
+  .copilot.fixed .copilot-text{color:#1d1d1f}
+
+  /* ---- scan progress ---- */
+  .panel{background:var(--surface);margin:12px 14px;border-radius:var(--radius);border:1px solid var(--line);overflow:hidden}
+  .panel-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);padding:13px 16px 9px}
+  .steps{padding:2px 8px 10px}
+  .step{display:flex;align-items:center;gap:11px;padding:8px 10px;font-size:13.5px;color:var(--muted);opacity:.45;transition:opacity .3s}
+  .step.active{opacity:1;color:var(--ink-2)}
+  .step.done{opacity:1;color:var(--ink)}
+  .tick{flex:none;width:20px;height:20px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center}
+  .step.active .tick{border-color:var(--indigo)}
+  .step.done .tick{border-color:var(--teal);background:var(--teal)}
+  .step.flag .tick{border-color:var(--warn);background:var(--warn)}
+  .tick svg{width:11px;height:11px;color:#fff;opacity:0}
+  .step.done .tick svg,.step.flag .tick svg{opacity:1}
+  .step .spin{width:13px;height:13px;border:2px solid var(--indigo);border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;display:none}
+  .step.active .spin{display:block}
+  .step.active .tick{display:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .step .note{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600}
+  .step.flag .note{color:var(--warn)}
+
+  /* ---- verdict card ---- */
+  .verdict{margin:12px 14px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);background:var(--surface);opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s}
+  .verdict.show{opacity:1;transform:none}
+  .verdict-strip{height:5px}
+  .verdict-body{padding:16px}
+  .axes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+  .axis{background:var(--bg);border-radius:var(--radius-sm);padding:10px;text-align:center}
+  .axis .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700}
+  .axis .v{font-size:12.5px;font-weight:700;margin-top:5px;line-height:1.2}
+  .vguidance{font-size:18px;font-weight:700;letter-spacing:-.3px;margin:2px 0 4px}
+  .vconf{font-size:12.5px;color:var(--muted);font-weight:600}
+  .scopebar{margin-top:13px;background:var(--scope-soft);border:1px solid #cfeaf7;border-radius:var(--radius-sm);padding:11px 13px;font-size:13px;line-height:1.4;color:#0a4d6b}
+  .scopebar b{color:#073d54}
+
+  /* ---- claim ledger ---- */
+  .claim{display:flex;gap:11px;padding:13px 16px;border-top:1px solid var(--line)}
+  .claim:first-child{border-top:0}
+  .claim .ci{flex:none;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+  .claim .ci svg{width:15px;height:15px}
+  .claim .ctext{font-size:14.5px;line-height:1.45;color:var(--ink)}
+  .claim .cmeta{display:none;margin-top:7px;flex-wrap:wrap;gap:5px;align-items:center}
+  body.xray .claim .cmeta{display:flex}
+  .chip{font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;letter-spacing:.3px;font-family:var(--mono)}
+  .chip.src{background:#f0f0f3;color:#555}
+  .chip.conf{background:#f0f0f3;color:#555}
+  .chip.fixed{background:#efe9ff;color:#5b3fd6}
+  .chip.ai{background:#e6f7f5;color:#0a7d72}
+  .chip.ev{background:var(--bg);color:var(--indigo);cursor:pointer;border:1px solid var(--line)}
+  .evidence{display:none;margin:0 16px 12px 53px;padding:11px 13px;background:#0e0e12;border-radius:10px;font-family:var(--mono);font-size:11.5px;color:#9fe0c8;line-height:1.7;white-space:pre-wrap}
+  .evidence.open{display:block}
+  /* claim type colors */
+  .t-observed .ci{background:#eef0ff;color:var(--indigo)}
+  .t-decoded .ci{background:#eef0ff;color:var(--indigo)}
+  .t-inferred .ci{background:var(--warn-soft);color:var(--warn)}
+  .t-not_checked .ci{background:#f0f0f3;color:#8e8e93}
+  .t-not_checked .ctext{color:var(--ink-2)}
+  .t-risk .ci{background:var(--severe-soft);color:var(--severe)}
+  .t-next_action .ci{background:var(--teal-soft);color:var(--teal)}
+
+  /* ---- followups ---- */
+  .followups{margin:12px 14px}
+  .followups .panel-h{padding:4px 4px 9px}
+  .fbtns{display:flex;flex-direction:column;gap:8px}
+  .fbtn{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;font-family:var(--sans);display:flex;align-items:center;gap:8px;transition:border-color .2s}
+  .fbtn:hover{border-color:var(--indigo)}
+  .fbtn .q{flex:none;color:var(--indigo)}
+  .fanswer{background:#fff;border:1px solid var(--line);border-radius:14px;margin-top:8px;overflow:hidden}
+  .fanswer .fa-note{font-size:10.5px;color:var(--muted);padding:9px 15px 0;font-weight:600;letter-spacing:.2px}
+
+  .reportbar{margin:14px;display:flex;gap:10px}
+  .reportbar button{flex:1;border:0;border-radius:14px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+  .reportbar .gen{background:var(--ink);color:#fff}
+  .reportbar .replay{background:#fff;color:var(--ink);border:1px solid var(--line)}
+
+  /* ---- report overlay ---- */
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;z-index:20}
+  .overlay.open{display:flex}
+  .sheet{background:#fff;width:100%;max-height:90%;overflow-y:auto;border-radius:22px 22px 0 0;padding:20px 18px 30px;animation:slideup .3s ease}
+  @keyframes slideup{from{transform:translateY(40px)}to{transform:none}}
+  .sheet h2{font-size:18px;margin:0 0 2px}
+  .sheet .rmeta{font-size:12px;color:var(--muted);font-family:var(--mono);margin-bottom:14px}
+  .badge{display:inline-flex;align-items:center;gap:6px;background:var(--teal-soft);color:#0a7d72;font-size:11px;font-weight:700;padding:6px 10px;border-radius:8px;margin:0 6px 8px 0}
+  .rgroup{margin-top:14px}
+  .rgroup .rg-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:6px}
+  .rline{font-size:13.5px;line-height:1.5;padding:6px 0;border-bottom:1px dashed var(--line);display:flex;gap:8px}
+  .rline .rdot{flex:none;margin-top:7px;width:6px;height:6px;border-radius:50%;background:var(--muted)}
+  .sheet .close{width:100%;margin-top:18px;background:var(--indigo);color:#fff;border:0;border-radius:14px;padding:14px;font-size:14px;font-weight:700;cursor:pointer}
+  .helpnote{max-width:412px;color:#7a7a86;font-size:11.5px;line-height:1.5;margin-top:16px;text-align:center}
+  .helpnote code{color:#b9b9c4}
+</style>
+</head>
+<body>
+  <div class="stagebar">
+    <div>
+      <h1>Car Copilot — Scan Theater</h1>
+      <div class="sub">Feel-prototype · mocked data · no adapter · the question is "does this feel AI-native?"</div>
+    </div>
+    <div class="controls">
+      <select id="scenario" title="scenario"></select>
+      <label><input type="checkbox" id="xray" /> show how it stays safe</label>
+      <button class="primary" id="replayTop">▸ replay scan</button>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="screen" id="screen">
+      <div class="topbar">
+        <div class="brand"><span class="dot"></span><span class="amber"></span><b>CAR&nbsp;COPILOT</b><span class="tag" id="adapterTag">ELM327 · generic</span></div>
+        <div class="modes" id="modes">
+          <button data-mode="owner">Owner</button>
+          <button data-mode="buyer">Buyer</button>
+          <button data-mode="seller">Seller</button>
+        </div>
+        <div class="stance" id="stance"></div>
+      </div>
+
+      <div class="copilot" id="copilot">
+        <div class="avatar think" id="avatar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v1a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/></svg>
+        </div>
+        <div class="copilot-text" id="copilotText"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h">Scan progress</div>
+        <div class="steps" id="steps"></div>
+      </div>
+
+      <div class="verdict" id="verdict">
+        <div class="verdict-strip" id="vstrip"></div>
+        <div class="verdict-body">
+          <div class="vguidance" id="vguidance"></div>
+          <div class="vconf" id="vconf"></div>
+          <div class="axes" id="axes"></div>
+          <div class="scopebar" id="scopebar"></div>
+        </div>
+        <div id="claims"></div>
+      </div>
+
+      <div class="followups" id="followupsWrap" style="display:none">
+        <div class="panel-h">Ask about this scan</div>
+        <div class="fbtns" id="fbtns"></div>
+      </div>
+
+      <div class="reportbar" id="reportbar" style="display:none">
+        <button class="gen" id="genReport">Generate report</button>
+        <button class="replay" id="replay">Scan again</button>
+      </div>
+
+      <div class="overlay" id="overlay">
+        <div class="sheet" id="sheet"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="helpnote">
+    Toggle <code>show how it stays safe</code> to reveal the <b>Claim Ledger</b> under every sentence — its
+    <code>source</code>, <code>confidence</code>, evidence, and whether the wording is <b>fixed</b> (facts / safety / scope) or <b>AI-phrased</b> (inferences). The model never writes a fixed claim.
+  </div>
+
+<script>
+/* ============================ ICONS ============================ */
+const I = {
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  chip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>',
+  bulb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.3 1 2h6c0-.7.3-1.3 1-2A7 7 0 0 0 12 2z"/></svg>',
+  noeye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10 10 0 0 1 12 19c-6.5 0-10-7-10-7a18 18 0 0 1 5.06-5.94M9.9 4.24A9 9 0 0 1 12 4c6.5 0 10 7 10 7a18 18 0 0 1-2.16 3.19"/><path d="M1 1l22 22"/></svg>',
+  warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  arrow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>',
+  bang:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg>',
+};
+const CLAIM_ICON = {observed:I.eye,decoded:I.chip,inferred:I.bulb,not_checked:I.noeye,risk:I.warn,next_action:I.arrow};
+
+/* ============================ SCENARIOS ============================
+   Each user-visible sentence is a Claim. modelEditable=false → fixed wording
+   (facts, safety, scope). modelEditable=true → the AI may warm the phrasing,
+   bounded by the claim's meaning. The verdict is deterministic; the model
+   only rewrites approved claims and never owns mechanicalRisk/scope/safety. */
+
+const SCOPE_TEXT = "I can see the engine and emissions computer. I can't see the brakes, airbags, ABS, steering, tires, suspension, or frame from this port.";
+
+const SCENARIOS = {
+  owner_misfire: {
+    label:"Owner · P0301 misfire",
+    defaultMode:"owner",
+    adapter:"ELM327 · generic",
+    steps:[
+      ["Adapter checked","line","capability"],
+      ["VIN read","",""],
+      ["Stored codes","note","1 found"],
+      ["Pending codes","",""],
+      ["Permanent codes","note","1 found"],
+      ["Self-tests (readiness)","note","complete"],
+      ["Freeze frame","",""],
+      ["Live readings","",""],
+    ],
+    narrate:[
+      "Connecting to your car's computer…",
+      "This reader sees the engine and emissions computer — not the brakes or airbags. I'll come back to that.",
+      "Reading stored codes… one came back.",
+      "Checking pending codes…",
+      "Checking permanent codes that survive a reset…",
+      "Self-tests are all complete, so this is a current reading.",
+      "Pulling the snapshot from when the code set…",
+      "Reading live sensors to see if it's acting up right now…",
+    ],
+    settle:"I found a cylinder 1 misfire. The rough idle and a lean oxygen reading point at ignition first.",
+    verdict:{
+      guidance:"Drive gently — service soon", strip:"var(--warn)",
+      conf:"Confidence: known · complete powertrain scan",
+      mechanicalRisk:["repair_soon","var(--warn)"], scanStatus:["complete","var(--teal)"], buyerRisk:["codes present","var(--warn)"],
+      scope:SCOPE_TEXT+" So this finding is real, but it's not the whole car.",
+      aiMode:"llm_explanation"
+    },
+    claims:[
+      {t:"Cylinder 1 is misfiring.",type:"decoded",src:"raw_obd",conf:"direct",fixed:true,ev:"mode 03 → 43 01 03 01\n  decoded: P0301  (cylinder 1 misfire)"},
+      {t:"The engine is idling rough — around 680 rpm.",type:"observed",src:"raw_obd",conf:"direct",fixed:true,ev:"mode 01 PID 0C → 41 0C 0A A0\n  decoded: 680 rpm  (normal idle ≈ 750–800)"},
+      {t:"The oxygen sensor is reading lean, which fits a cylinder that isn't firing cleanly.",type:"observed",src:"raw_obd",conf:"strong",fixed:false,ev:"mode 01 PID 14 → 41 14 1E FF\n  decoded: 0.15 V upstream O2 (lean)"},
+      {t:"A weak ignition coil or spark plug on cylinder 1 is the first thing to check.",type:"inferred",src:"rules_engine",conf:"strong",fixed:false,ev:"rule: misfire + rough idle + lean O2 → ignition-first\n  inputs: P0301, rpm=680, o2=lean"},
+      {t:SCOPE_TEXT,type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true,ev:"adapter capability: generic ELM327\n  reachable: powertrain/emissions (mode 01/03/07/0A)\n  NOT reachable: ABS, SRS, body, OEM modules"},
+      {t:"You can drive it gently to a shop, but go easy — a misfire can cook the catalytic converter over time.",type:"next_action",src:"rules_engine",conf:"strong",fixed:false,ev:"mechanicalRisk=repair_soon → driveGuidance: gentle/local OK, service soon"},
+    ],
+    followups:{
+      drive_home:{q:"Can I drive it?", claims:[
+        {t:"Yes, gently and not far — go easy on the throttle.",type:"next_action",src:"rules_engine",conf:"strong",fixed:false},
+        {t:"This is about the engine only. I can't tell you anything about the brakes or anything else from this scan.",type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+      cost:{q:"What could this cost?", claims:[
+        {t:"A coil or plug on one cylinder is usually a small job — roughly $90–$280 at a shop.",type:"inferred",src:"dtc_database",conf:"weak",fixed:false},
+        {t:"That's an estimate from the code, not a quote — your shop may see it differently.",type:"risk",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+      mechanic:{q:"What would a mechanic check next?", claims:[
+        {t:"Swap the coil on cylinder 1 to a known-good one and see if the misfire moves — that isolates coil vs plug vs injector.",type:"inferred",src:"rules_engine",conf:"strong",fixed:false},
+      ]},
+      scope:{q:"What does this scan NOT check?", claims:[
+        {t:SCOPE_TEXT,type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+    },
+    report:{title:"Engine & emissions scan",found:["Cylinder 1 misfire (P0301), confirmed + permanent","Rough idle ~680 rpm; lean O2 upstream"],notChecked:["Brakes / ABS","Airbags / SRS","Steering","Transmission internals","Tires, suspension, frame (not electronic)"],next:["Check cylinder-1 coil and spark plug first","Drive gently until repaired"]}
+  },
+
+  buyer_clean: {
+    label:"Buyer · clean + self-tests complete",
+    defaultMode:"buyer",
+    adapter:"ELM327 · generic",
+    steps:[
+      ["Adapter checked","line","capability"],
+      ["VIN read","note","decoded"],
+      ["Stored codes","note","none"],
+      ["Pending codes","note","none"],
+      ["Permanent codes","note","none"],
+      ["Self-tests (readiness)","note","complete"],
+      ["Freeze frame","note","none"],
+      ["Live readings","note","normal"],
+    ],
+    narrate:[
+      "Connecting — I'm checking what this adapter can actually read.",
+      "This reader sees the engine and emissions computer. It can't see airbags or ABS.",
+      "No stored engine codes so far.",
+      "No pending codes either.",
+      "No permanent codes — nothing was cleared that left a trace.",
+      "And the self-tests are all complete — so this is a current reading, not a freshly-reset computer.",
+      "No freeze frame to pull — nothing's set.",
+      "Live sensors look normal for idle.",
+    ],
+    settle:"No engine or emissions codes, and the self-tests are all done. That's a genuinely current clean reading — for the part I can see.",
+    verdict:{
+      guidance:"No engine codes — scan is current", strip:"var(--scope)",
+      conf:"Confidence: known · complete powertrain scan",
+      mechanicalRisk:["none seen","var(--teal)"], scanStatus:["complete","var(--teal)"], buyerRisk:["low (OBD)","var(--scope)"],
+      scope:"No engine codes is good news. It is NOT the same as a clean car — I never looked at the brakes, airbags, or anything mechanical.",
+      aiMode:"cached_explanation"
+    },
+    claims:[
+      {t:"No stored, pending, or permanent engine codes.",type:"observed",src:"raw_obd",conf:"direct",fixed:true,ev:"mode 03 → 43 00  (none)\nmode 07 → 47 00  (none)\nmode 0A → 4A 00  (none)"},
+      {t:"The car's self-tests are all complete.",type:"decoded",src:"readiness_monitor",conf:"direct",fixed:true,ev:"mode 01 PID 01 → 41 01 00 07 FF 00\n  MIL: off · stored: 0 · monitors: all complete"},
+      {t:"So this isn't a freshly-cleared computer hiding a problem.",type:"inferred",src:"rules_engine",conf:"strong",fixed:false,ev:"rule: 0 codes + monitors complete + 0 permanent → not recently cleared"},
+      {t:SCOPE_TEXT+" No engine codes is good news — it is not the same as a clean car.",type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true,ev:"adapter capability: generic ELM327 → powertrain only"},
+      {t:"Worth a short test drive and a mechanic's physical check before you buy.",type:"next_action",src:"rules_engine",conf:"strong",fixed:false,ev:"buyerRisk=low_obd_risk → recommend physical PPI"},
+    ],
+    followups:{
+      cleared:{q:"Could codes have been cleared recently?", claims:[
+        {t:"Unlikely here — the self-tests are all complete, which takes 50–100 miles of driving to finish. A fresh clear would leave them unfinished.",type:"inferred",src:"rules_engine",conf:"strong",fixed:false},
+      ]},
+      seller:{q:"What should I ask the seller?", claims:[
+        {t:"Not much on the engine side — the scan is clean and current. Focus your questions on service history and a brake/suspension check.",type:"next_action",src:"rules_engine",conf:"strong",fixed:false},
+      ]},
+      drive_home:{q:"Can I drive it home?", claims:[
+        {t:"Nothing the engine scan saw should stop you.",type:"next_action",src:"rules_engine",conf:"strong",fixed:false},
+        {t:"But I can't see the brakes or airbags from here, so that's not a safety clearance — just an engine one.",type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+      scope:{q:"What does this scan NOT check?", claims:[
+        {t:SCOPE_TEXT,type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+    },
+    report:{title:"Pre-purchase scan — engine & emissions",found:["No stored, pending, or permanent codes","Self-tests complete → reading is current"],notChecked:["Brakes / ABS","Airbags / SRS","Steering","Tires, suspension, frame","Anything not on the standard port"],next:["Short test drive","Mechanic physical inspection before purchase"]}
+  },
+
+  buyer_recent_clear: {
+    label:"Buyer · HERO — codes likely just cleared",
+    defaultMode:"buyer",
+    adapter:"ELM327 · generic",
+    steps:[
+      ["Adapter checked","line","capability"],
+      ["VIN read","note","decoded"],
+      ["Stored codes","note","none"],
+      ["Pending codes","note","none"],
+      ["Permanent codes","note","none"],
+      ["Self-tests (readiness)","flag","not ready"],
+      ["Freeze frame","note","none"],
+      ["Live readings","note","normal"],
+    ],
+    narrate:[
+      "Connecting — first thing I check on a car for sale is whether someone just wiped the codes.",
+      "This reader sees the engine and emissions computer. It can't see airbags or ABS.",
+      "No stored engine codes came back…",
+      "No pending codes…",
+      "No permanent codes either…",
+      "…but the self-tests aren't finished. That's the tell I watch for.",
+      "No freeze frame — but with the monitors not ready, that's expected after a reset.",
+      "Live sensors read normal — but normal doesn't mean much right after a clear.",
+    ],
+    settle:"No codes — but the self-tests aren't done. That often means the codes were cleared recently, sometimes right before a sale. I would not call this clean yet.",
+    verdict:{
+      guidance:"Don't treat this as clean yet", strip:"var(--warn)",
+      conf:"Confidence: thin · self-tests incomplete",
+      mechanicalRisk:["unknown","var(--muted)"], scanStatus:["not ready","var(--warn)"], buyerRisk:["recent clear?","var(--severe)"],
+      scope:"With the monitors incomplete, a clean code list can't be trusted yet — and I still can't see the brakes or airbags at all.",
+      aiMode:"llm_explanation"
+    },
+    claims:[
+      {t:"No stored engine codes right now.",type:"observed",src:"raw_obd",conf:"direct",fixed:true,ev:"mode 03 → 43 00  (none)"},
+      {t:"But the car's self-tests are not complete — 4 of 8 monitors haven't run.",type:"decoded",src:"readiness_monitor",conf:"direct",fixed:true,ev:"mode 01 PID 01 → 41 01 00 04 00 00\n  MIL: off · stored: 0 · monitors INCOMPLETE: misfire, fuel, catalyst, EVAP"},
+      {t:"This pattern — no codes but incomplete self-tests — usually means the computer was reset or codes cleared in the last day or two.",type:"risk",src:"rules_engine",conf:"strong",fixed:false,ev:"rule: 0 codes + monitors not ready + 0 permanent → recent_clear_suspected"},
+      {t:SCOPE_TEXT,type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true,ev:"adapter capability: generic ELM327 → powertrain only"},
+      {t:"Ask the seller if the battery was disconnected or codes cleared, then drive it 30–50 miles and rescan.",type:"next_action",src:"rules_engine",conf:"strong",fixed:false,ev:"recent_clear_suspected → recommend re-scan after drive cycle"},
+    ],
+    followups:{
+      cleared:{q:"Could codes have been cleared recently?", claims:[
+        {t:"Very likely. The self-tests reset to 'not ready' after a battery disconnect or a code clear, and they take 50–100 miles to finish.",type:"inferred",src:"rules_engine",conf:"strong",fixed:false},
+        {t:"A seller clearing the light right before a showing is the oldest trick on the lot.",type:"risk",src:"rules_engine",conf:"strong",fixed:false},
+      ]},
+      seller:{q:"What should I ask the seller?", claims:[
+        {t:"\"Was the battery disconnected recently?\" \"Were any codes or the check-engine light cleared?\" \"Can we drive it 30–50 miles and scan again?\"",type:"next_action",src:"rules_engine",conf:"strong",fixed:false},
+      ]},
+      drive_home:{q:"Can I drive it home?", claims:[
+        {t:"Mechanically, I genuinely don't know — I can't trust a code list when the self-tests haven't run.",type:"risk",src:"rules_engine",conf:"unknown",fixed:true},
+        {t:"And I can't see the brakes or airbags at all. I won't give you a drive-clearance on this one.",type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+      scope:{q:"What does this scan NOT check?", claims:[
+        {t:SCOPE_TEXT,type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+    },
+    report:{title:"Pre-purchase scan — ⚠ read this first",found:["No codes — BUT self-tests incomplete (4 of 8 not ready)","Pattern consistent with a recent code clear / battery reset"],notChecked:["Brakes / ABS","Airbags / SRS","Steering","Whether a real fault is being masked"],next:["Ask seller about recent clears / battery work","Drive 30–50 miles, then rescan","Do not treat current 'no codes' as clean"]}
+  },
+
+  emergency_overheat: {
+    label:"Owner · EMERGENCY — AI suppressed",
+    defaultMode:"owner",
+    adapter:"ELM327 · generic",
+    steps:[
+      ["Adapter checked","line","capability"],
+      ["VIN read","note","decoded"],
+      ["Stored codes","note","none yet"],
+      ["Pending codes","",""],
+      ["Permanent codes","",""],
+      ["Self-tests (readiness)","",""],
+      ["Freeze frame","",""],
+      ["Live readings","flag","119°C"],
+    ],
+    narrate:[
+      "Connecting to your car's computer…",
+      "This reader sees the engine and emissions computer.",
+      "No stored codes yet…",
+      "Checking pending…",
+      "Checking permanent…",
+      "Checking self-tests…",
+      "Pulling freeze frame…",
+      "Reading live sensors — wait.",
+    ],
+    settle:"Stop driving when it's safe and shut the engine off. Your coolant is dangerously hot, and driving on it can warp the engine. This isn't a wait-and-see one.",
+    fixedSafety:true,
+    verdict:{
+      guidance:"Stop driving now", strip:"var(--severe)",
+      conf:"Live-data emergency · the AI did not write this",
+      mechanicalRisk:["stop now","var(--severe)"], scanStatus:["live alert","var(--severe)"], buyerRisk:["—","var(--muted)"],
+      scope:"This is a live-reading emergency. The plain-English message above is fixed safety copy — the AI is not allowed to narrate or soften it.",
+      aiMode:"fixed_safety_copy"
+    },
+    claims:[
+      {t:"Coolant temperature is 119°C and climbing.",type:"observed",src:"raw_obd",conf:"direct",fixed:true,ev:"mode 01 PID 05 → 41 05 9F\n  decoded: 119°C  (emergency threshold ≥ 115°C)"},
+      {t:"This is hot enough to damage the engine. Keep driving and you risk warping the head.",type:"risk",src:"rules_engine",conf:"direct",fixed:true,ev:"live-data override fires ABOVE classification — no DTC required"},
+      {t:"Pull over when safe, shut it off, and let it cool. Check the coolant level once it's cold. If it climbs again, don't drive it.",type:"next_action",src:"rules_engine",conf:"strong",fixed:true,ev:"safety tier = emergency → fixed copy, model suppressed"},
+      {t:SCOPE_TEXT,type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true,ev:"adapter capability: generic ELM327 → powertrain only"},
+    ],
+    followups:{
+      scope:{q:"What does this scan NOT check?", claims:[
+        {t:SCOPE_TEXT,type:"not_checked",src:"rules_engine",conf:"unknown",fixed:true},
+      ]},
+    },
+    report:{title:"⚠ Live emergency — overheating",found:["Coolant 119°C and climbing (emergency)","No stored codes — this is a live-data alert, not a DTC"],notChecked:["Brakes / ABS","Airbags / SRS","Root cause of overheating (needs physical inspection)"],next:["Stop and shut off when safe","Let cool, check coolant","Don't drive if it recurs"]}
+  },
+};
+
+/* ============================ STANCE COPY ============================ */
+const STANCE = {
+  owner:"Owner mode · “What’s wrong with my car?”",
+  buyer:"Buyer mode · “What is this car hiding?”",
+  seller:"Seller mode · “Generate an honesty report.”",
+};
+// which follow-ups show per mode (by id), and order
+const MODE_FOLLOWUPS = {
+  owner:["drive_home","cost","mechanic","scope"],
+  buyer:["cleared","seller","drive_home","scope"],
+  seller:["scope"],
+};
+
+/* ============================ STATE / RENDER ============================ */
+let cur = "owner_misfire";
+let mode = "owner";
+let timers = [];
+const $ = s=>document.querySelector(s);
+
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+
+function buildScenarioPicker(){
+  const sel=$("#scenario");
+  sel.innerHTML="";
+  Object.entries(SCENARIOS).forEach(([k,v])=>{
+    const o=document.createElement("option");o.value=k;o.textContent=v.label;sel.appendChild(o);
+  });
+  sel.value=cur;
+  sel.onchange=()=>{cur=sel.value;mode=SCENARIOS[cur].defaultMode;syncModes();startScan();};
+}
+
+function syncModes(){
+  document.querySelectorAll("#modes button").forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));
+  $("#stance").textContent=STANCE[mode];
+}
+
+function setCopilot(text,fixed){
+  const el=$("#copilotText");
+  $("#copilot").classList.toggle("fixed",!!fixed);
+  $("#avatar").classList.toggle("fixed",!!fixed);
+  el.innerHTML="";
+  // light typewriter
+  let i=0; const span=document.createElement("span"); el.appendChild(span);
+  const caret=document.createElement("span"); caret.className="caret"; el.appendChild(caret);
+  function tick(){
+    if(i<=text.length){span.textContent=text.slice(0,i);i+=2;timers.push(setTimeout(tick,12));}
+    else{caret.remove();}
+  }
+  tick();
+}
+
+function renderSteps(activeIndex,done){
+  const sc=SCENARIOS[cur];
+  const wrap=$("#steps");wrap.innerHTML="";
+  sc.steps.forEach((st,idx)=>{
+    const [label,kind,note]=st;
+    const isDone=idx<activeIndex||(done&&idx<=activeIndex);
+    const isActive=!done&&idx===activeIndex;
+    const flag=isDone&&kind==="flag";
+    const div=document.createElement("div");
+    div.className="step"+(isActive?" active":"")+(isDone?(flag?" done flag":" done"):"");
+    div.innerHTML=`<div class="spin"></div><div class="tick">${flag?I.bang:I.check}</div>
+      <div>${label}</div>${(isDone&&note)?`<div class="note">${note}</div>`:""}`;
+    wrap.appendChild(div);
+  });
+}
+
+function startScan(){
+  clearTimers();
+  const sc=SCENARIOS[cur];
+  $("#adapterTag").textContent=sc.adapter;
+  $("#verdict").classList.remove("show");
+  $("#followupsWrap").style.display="none";
+  $("#reportbar").style.display="none";
+  $("#avatar").classList.add("think");
+  $("#screen").scrollTop=0;
+  let i=0;
+  function step(){
+    if(i<sc.steps.length){
+      renderSteps(i,false);
+      setCopilot(sc.narrate[i], sc.fixedSafety&&i===sc.steps.length-1);
+      i++;
+      timers.push(setTimeout(step, i===1?1100:950));
+    } else {
+      renderSteps(sc.steps.length-1,true);
+      $("#avatar").classList.toggle("think",false);
+      setCopilot(sc.settle, sc.fixedSafety);
+      timers.push(setTimeout(revealVerdict,500));
+    }
+  }
+  step();
+}
+
+function axisHTML(k,arr){return `<div class="axis"><div class="k">${k}</div><div class="v" style="color:${arr[1]}">${arr[0]}</div></div>`;}
+
+function revealVerdict(){
+  const sc=SCENARIOS[cur], v=sc.verdict;
+  $("#vstrip").style.background=v.strip;
+  $("#vguidance").textContent=v.guidance;
+  $("#vguidance").style.color=v.strip;
+  $("#vconf").textContent=v.conf;
+  $("#axes").innerHTML=axisHTML("Mechanical",v.mechanicalRisk)+axisHTML("Scan",v.scanStatus)+axisHTML("Buyer",v.buyerRisk);
+  $("#scopebar").innerHTML=`<b>What I couldn't see.</b> ${v.scope}`;
+  // claims
+  const cw=$("#claims");cw.innerHTML="";
+  sc.claims.forEach((c,idx)=>{
+    const row=document.createElement("div");
+    row.className="claim t-"+c.type;
+    row.innerHTML=`<div class="ci">${CLAIM_ICON[c.type]}</div>
+      <div style="flex:1">
+        <div class="ctext">${c.t}</div>
+        <div class="cmeta">
+          <span class="chip src">${c.src}</span>
+          <span class="chip conf">conf: ${c.conf}</span>
+          <span class="chip ${c.fixed?'fixed':'ai'}">${c.fixed?'fixed wording':'AI-phrased'}</span>
+          ${c.ev?`<span class="chip ev" data-ev="${idx}">evidence ▾</span>`:""}
+        </div>
+      </div>`;
+    cw.appendChild(row);
+    if(c.ev){
+      const ev=document.createElement("div");ev.className="evidence";ev.id="ev"+idx;ev.textContent=c.ev;cw.appendChild(ev);
+    }
+  });
+  cw.querySelectorAll(".chip.ev").forEach(ch=>ch.onclick=()=>{
+    const e=$("#ev"+ch.dataset.ev);e.classList.toggle("open");
+    ch.textContent=e.classList.contains("open")?"evidence ▴":"evidence ▾";
+  });
+  $("#verdict").classList.add("show");
+  renderFollowups();
+  $("#followupsWrap").style.display="block";
+  $("#reportbar").style.display="flex";
+}
+
+function renderFollowups(){
+  const sc=SCENARIOS[cur];
+  const wrap=$("#fbtns");wrap.innerHTML="";
+  const ids=MODE_FOLLOWUPS[mode].filter(id=>sc.followups[id]);
+  ids.forEach(id=>{
+    const f=sc.followups[id];
+    const b=document.createElement("button");b.className="fbtn";
+    b.innerHTML=`<span class="q">›</span> ${f.q}`;
+    b.onclick=()=>{
+      // toggle: if answer already open under this button, remove it
+      const next=b.nextElementSibling;
+      if(next&&next.classList.contains("fanswer")){next.remove();b.style.borderColor="";return;}
+      // close any other open answers
+      wrap.querySelectorAll(".fanswer").forEach(a=>a.remove());
+      const ans=document.createElement("div");ans.className="fanswer";
+      ans.innerHTML=`<div class="fa-note">Answered only from this scan — not general car advice.</div>`;
+      f.claims.forEach(c=>{
+        const row=document.createElement("div");row.className="claim t-"+c.type;
+        row.innerHTML=`<div class="ci">${CLAIM_ICON[c.type]}</div><div style="flex:1"><div class="ctext">${c.t}</div>
+          <div class="cmeta"><span class="chip src">${c.src}</span><span class="chip ${c.fixed?'fixed':'ai'}">${c.fixed?'fixed wording':'AI-phrased'}</span></div></div>`;
+        ans.appendChild(row);
+      });
+      b.after(ans);b.style.borderColor="var(--indigo)";
+    };
+    wrap.appendChild(b);
+  });
+}
+
+function openReport(){
+  const sc=SCENARIOS[cur], r=sc.report;
+  const titleByMode = mode==="seller" ? "Seller honesty report" : (mode==="buyer" ? "Pre-purchase scan report" : r.title);
+  const now=new Date();
+  const sheet=$("#sheet");
+  const grp=(h,arr,dotColor)=>`<div class="rgroup"><div class="rg-h">${h}</div>${arr.map(x=>`<div class="rline"><span class="rdot" style="background:${dotColor}"></span><span>${x}</span></div>`).join("")}</div>`;
+  sheet.innerHTML=`
+    <h2>${titleByMode}</h2>
+    <div class="rmeta">VIN 1HGCM…&nbsp;·&nbsp;scanned ${now.toLocaleString()}&nbsp;·&nbsp;report #${(Math.floor(now.getTime()/1000)%100000).toString(16).toUpperCase()}</div>
+    <span class="badge">✓ raw OBD evidence included</span>
+    <span class="badge">✓ readiness status included</span>
+    <span class="badge">✓ scope limits stated</span>
+    ${grp("What the scan found", r.found, "var(--warn)")}
+    ${grp("What this scan did NOT check", r.notChecked, "var(--muted)")}
+    ${grp("What to do next", r.next, "var(--teal)")}
+    <button class="close" id="closeSheet">Close</button>`;
+  $("#overlay").classList.add("open");
+  $("#closeSheet").onclick=()=>$("#overlay").classList.remove("open");
+}
+
+/* ============================ WIRING ============================ */
+document.querySelectorAll("#modes button").forEach(b=>b.onclick=()=>{
+  mode=b.dataset.mode;syncModes();
+  if($("#verdict").classList.contains("show")){renderFollowups();}
+});
+$("#xray").onchange=e=>document.body.classList.toggle("xray",e.target.checked);
+$("#replay").onclick=startScan;
+$("#replayTop").onclick=startScan;
+$("#genReport").onclick=openReport;
+$("#overlay").onclick=e=>{if(e.target.id==="overlay")$("#overlay").classList.remove("open");};
+
+buildScenarioPicker();
+syncModes();
+startScan();
+</script>
+</body>
+</html>
