@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Car Copilot — Result Card (result-first prototype)</title>
+<style>
+  :root{
+    --bg:#F5F5F7; --surface:#FFFFFF; --ink:#1D1D1F; --ink-2:#3A3A3C; --muted:#8E8E93;
+    --line:#E8E8EC; --indigo:#6366F1; --indigo-soft:#EEF0FF;
+    --severe:#FF3B30; --severe-soft:#FFECEB; --severe-ink:#C7281E;
+    --amber:#FF9500; --amber-2:#F2600C; --amber-soft:#FFF1E2; --amber-ink:#B8500B;
+    --teal:#0FB5A4; --teal-soft:#E4F7F4; --teal-ink:#0A7D72;
+    --radius:22px; --radius-sm:13px;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0e0e12;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:22px 12px 60px}
+
+  .stagebar{width:100%;max-width:900px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .stagebar h1{color:#fff;font-size:15px;font-weight:600;margin:0}
+  .stagebar .sub{color:#9a9aa5;font-size:12px;margin-top:2px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .controls select,.controls button{font-family:var(--sans);font-size:12.5px;border-radius:10px;border:1px solid #2c2c34;background:#1b1b22;color:#e7e7ee;padding:8px 10px;cursor:pointer}
+  .controls button.primary{background:var(--indigo);border-color:var(--indigo);color:#fff;font-weight:600}
+  .controls label{color:#9a9aa5;font-size:11px;display:flex;align-items:center;gap:6px}
+
+  .phone{width:100%;max-width:412px;background:var(--bg);border-radius:42px;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden;border:10px solid #000;position:relative}
+  .screen{height:772px;overflow-y:auto;position:relative}
+  .screen::-webkit-scrollbar{width:0}
+
+  .topbar{display:flex;align-items:center;gap:9px;padding:16px 20px 14px}
+  .topbar .bdot{width:9px;height:9px;border-radius:50%;background:var(--indigo);box-shadow:0 0 0 4px var(--indigo-soft)}
+  .topbar .amberdot{width:6px;height:6px;border-radius:50%;background:var(--amber);margin-left:-3px}
+  .topbar b{font-size:13.5px;letter-spacing:.4px}
+  .topbar .veh{margin-left:auto;text-align:right;font-size:11.5px;color:var(--muted);line-height:1.3}
+  .topbar .veh .vm{color:var(--ink-2);font-weight:600}
+
+  /* ---- loading (brief, not theater) ---- */
+  .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:560px;gap:18px;animation:fade .3s}
+  .loading .ring{width:46px;height:46px;border-radius:14px;background:var(--indigo);display:flex;align-items:center;justify-content:center;animation:pulse 1.4s ease-in-out infinite}
+  .loading .ring svg{width:26px;height:26px}
+  .loading .lt{font-size:15px;font-weight:600;color:var(--ink-2)}
+  .loading .bar{width:160px;height:4px;border-radius:4px;background:#e3e3e8;overflow:hidden}
+  .loading .bar i{display:block;height:100%;width:40%;background:var(--indigo);border-radius:4px;animation:slide 1.1s ease-in-out infinite}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:.92}50%{transform:scale(1.07);opacity:1}}
+  @keyframes slide{0%{margin-left:-40%}100%{margin-left:100%}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+
+  /* ---- the result card (the product) ---- */
+  .card{padding:6px 18px 20px;animation:rise .45s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .section{font-size:12px;font-weight:600;color:var(--muted);margin:6px 2px 12px}
+  .headwrap{border-left:4px solid var(--indigo);padding:2px 0 2px 14px;margin-bottom:16px}
+  .headline{font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.05}
+  .subhead{font-size:17px;font-weight:700;color:var(--muted);margin-top:3px;letter-spacing:-.3px}
+  .finding{font-size:19px;font-weight:700;letter-spacing:-.3px;margin:0 2px 8px}
+  .explain{font-size:16px;line-height:1.5;color:var(--ink-2);margin:0 2px 18px}
+
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+  .meta .chip{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:9px 13px;font-size:13px;font-weight:700;color:var(--ink-2)}
+  .tag{display:inline-flex;align-items:center;gap:8px;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:700;margin:0 0 18px}
+  .tag .td{width:8px;height:8px;border-radius:50%;background:currentColor}
+
+  .ctas{display:flex;flex-direction:column;gap:9px;margin-bottom:8px}
+  .cta{display:flex;align-items:center;justify-content:space-between;border-radius:14px;padding:15px 17px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans);border:1px solid var(--line);background:var(--surface);color:var(--ink);transition:.18s}
+  .cta:hover{border-color:var(--indigo)}
+  .cta.primary{background:var(--indigo);border-color:var(--indigo);color:#fff}
+  .cta.primary.sev{background:var(--severe);border-color:var(--severe)}
+  .cta .arr{opacity:.7;font-weight:800}
+
+  .work{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin-top:9px;overflow:hidden;animation:fade .25s}
+  .work .wh{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:13px 16px 4px}
+  .work ol{margin:4px 0 6px;padding:0 18px 6px 34px}
+  .work ol li{font-size:14px;line-height:1.5;color:var(--ink-2);margin:7px 0}
+  .work .draft{margin:6px 14px 14px;background:var(--bg);border-radius:11px;padding:13px 14px;font-size:14px;line-height:1.5;color:var(--ink)}
+  .work .copy{display:block;margin:0 14px 14px;background:var(--ink);color:#fff;border:0;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+  .work .sellerq{margin:6px 14px 14px;display:flex;flex-direction:column;gap:9px}
+  .work .sellerq div{font-size:14.5px;line-height:1.4;color:var(--ink);font-weight:600;padding-left:14px;border-left:2px solid var(--indigo)}
+
+  /* ---- collapsed drawers (evidence one tap away) ---- */
+  .drawers{margin-top:16px;border-top:1px solid var(--line)}
+  .drawer{border-bottom:1px solid var(--line)}
+  .drawer .dh{display:flex;align-items:center;justify-content:space-between;padding:14px 4px;font-size:13.5px;font-weight:700;color:var(--ink-2);cursor:pointer;user-select:none}
+  .drawer .dh .car{color:var(--muted);font-weight:800;transition:.2s}
+  .drawer.open .dh .car{transform:rotate(180deg)}
+  .drawer .db{display:none;padding:0 4px 16px}
+  .drawer.open .db{display:block;animation:fade .25s}
+  .drawer .why{font-size:14px;line-height:1.5;color:var(--ink-2)}
+  .rows{font-family:var(--mono);font-size:12.5px;line-height:1.9;color:var(--ink-2)}
+  .rows .r{display:flex;gap:9px} .rows .r::before{content:"·";color:var(--indigo);font-weight:800}
+  .nots{display:flex;flex-wrap:wrap;gap:7px}
+  .nots span{background:#f0f0f3;color:#6f6f78;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:9px}
+  .bytelink{margin-top:10px;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer;user-select:none}
+  .bytes{display:none;margin-top:8px;background:#0e0e12;border-radius:10px;padding:11px 13px;font-family:var(--mono);font-size:11px;line-height:1.7;color:#9fe0c8;white-space:pre-wrap}
+  .bytes.open{display:block}
+
+  /* ---- debug: the hidden data contract (off by default) ---- */
+  .ledger{display:none;margin:14px 18px 0;border:1px dashed #c8b6ff;border-radius:14px;background:#faf8ff;overflow:hidden}
+  body.debug .ledger{display:block}
+  .ledger .lh{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#7b54e0;padding:11px 14px 4px}
+  .ledger .lr{display:flex;gap:9px;align-items:flex-start;padding:8px 14px;border-top:1px solid #efe7ff;font-size:12.5px;line-height:1.4}
+  .ledger .lr:first-of-type{border-top:0}
+  .ledger .lt{flex:1;color:var(--ink-2)}
+  .ledger .lm{flex:none;font-family:var(--mono);font-size:10px;color:#9a8fc0}
+  .ledger .fx{color:#7b54e0;font-weight:700}
+
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.42);display:none;align-items:flex-end;z-index:30}
+  .overlay.open{display:flex}
+  .sheet{background:#fff;width:100%;max-height:92%;overflow-y:auto;border-radius:24px 24px 0 0;padding:20px 18px 30px;animation:slideup .3s ease}
+  @keyframes slideup{from{transform:translateY(50px)}to{transform:none}}
+  .sheet h2{font-size:18px;margin:0 0 2px}
+  .sheet .rmeta{font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-bottom:13px}
+  .sheet .intro{font-size:14px;line-height:1.45;color:var(--ink-2);margin-bottom:14px}
+  .badge{display:inline-flex;gap:5px;background:var(--teal-soft);color:var(--teal-ink);font-size:11px;font-weight:700;padding:6px 10px;border-radius:8px;margin:0 6px 8px 0}
+  .rgroup{margin-top:15px}
+  .rgroup .rg-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px}
+  .rline{font-size:13.5px;line-height:1.5;padding:6px 0;border-bottom:1px dashed var(--line);display:flex;gap:9px}
+  .rline .rdot{flex:none;margin-top:7px;width:6px;height:6px;border-radius:50%}
+  .sheet .sig{margin-top:16px;font-size:12.5px;color:var(--muted);font-style:italic}
+  .sheet .close{width:100%;margin-top:16px;background:var(--indigo);color:#fff;border:0;border-radius:13px;padding:14px;font-size:14px;font-weight:700;cursor:pointer}
+  .helpnote{max-width:412px;color:#7a7a86;font-size:11.5px;line-height:1.5;margin-top:16px;text-align:center}
+  .helpnote code{color:#b9b9c4}
+</style>
+</head>
+<body>
+  <div class="stagebar">
+    <div>
+      <h1>Car Copilot — Result Card</h1>
+      <div class="sub">Result-first · the answer, then evidence one tap away · no thinking UI</div>
+    </div>
+    <div class="controls">
+      <select id="scenario"></select>
+      <label><input type="checkbox" id="debug" /> debug · show the data contract underneath</label>
+      <button class="primary" id="replayTop">▸ rescan</button>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="screen" id="screen">
+      <div class="topbar">
+        <span class="bdot"></span><span class="amberdot"></span><b>CAR&nbsp;COPILOT</b>
+        <div class="veh"><div class="vm" id="vehName"></div><div id="vehMiles"></div></div>
+      </div>
+      <div id="stage"></div>
+      <div class="ledger" id="ledger"></div>
+      <div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
+    </div>
+  </div>
+
+  <div class="helpnote">
+    The model never appears as a thought process. It shows up as <b>work product</b> — the diagnosis, the mechanic message, the buyer report, the "don't trust this yet." The Claim Ledger still grounds every line; flip <code>debug</code> to see it underneath.
+  </div>
+
+<script>
+const SCOPE_ITEMS=["Brakes / ABS","Airbags / SRS","Steering","Transmission internals","Tires · suspension · frame"];
+
+const SC={
+  owner_misfire:{
+    label:"Owner · P0301 misfire",
+    veh:"2021 VW Jetta", miles:"47,000 mi",
+    section:"Here's what I'm seeing",
+    headline:"Safe for short trips", sub:null, color:"var(--indigo)",
+    finding:"Cylinder 1 misfire",
+    explain:"One cylinder is missing at idle. The rough idle and a lean oxygen reading point first to the coil or spark plug on cylinder 1.",
+    meta:{type:"specs", specs:["$80–$160","~45 min","DIY-friendly"]},
+    ctas:[{label:"Walk me through the fix", action:"fix", primary:true},{label:"Send this to a mechanic instead", action:"mechanic"}],
+    work:{
+      fix:["Let the engine cool, then pop the hood.","Find the ignition coil on cylinder 1.","Swap it with the coil from a neighboring cylinder.","Rescan. If the misfire moves with the coil, that's your part. If it stays put, replace the spark plug."],
+      mechanic:"Hi — my 2021 VW Jetta (47k mi) is throwing a P0301: cylinder 1 misfire. Rough idle around 685 rpm, and the bank-1 oxygen sensor is reading lean. Looks like the coil or spark plug on cylinder 1. Can you take a look? Thanks.",
+    },
+    drawers:{
+      why:"The car reported the misfire code directly (P0301). The rough idle and the lean oxygen reading both point to cylinder 1 not firing cleanly — the classic coil/plug signature.",
+      evidence:["P0301 · cylinder 1 misfire","RPM 685 · rough idle","O₂ bank 1 · 0.15 V · lean","Readiness · complete"],
+      bytes:"mode 03 → 43 01 03 01\nmode 01 0C → 41 0C 0A A0  (685 rpm)\nmode 01 14 → 41 14 1E FF  (0.15 V, lean)\nmode 01 01 → 41 01 00 07 FF 00  (monitors complete)",
+      notChecked:SCOPE_ITEMS,
+    },
+    ledger:[
+      ["Cylinder 1 is misfiring.","raw_obd · direct",true],
+      ["Idle is rough (~685 rpm).","raw_obd · direct",true],
+      ["O₂ bank 1 reads lean.","raw_obd · strong",true],
+      ["First suspect: coil or plug, cyl 1.","rules · strong",false],
+      ["Drive gently; service soon.","rules · strong",false],
+      ["Not checked: brakes / airbags / ABS / …","rules · scope",true],
+    ],
+  },
+
+  buyer_clean:{
+    label:"Buyer · clean & current",
+    veh:"2017 Honda Civic", miles:"92,000 mi",
+    section:"Pre-purchase scan",
+    headline:"No engine codes found", sub:null, color:"var(--teal)",
+    finding:null,
+    explain:"This is a current clean engine scan. No stored, pending, or permanent codes came back, and the self-tests are complete.",
+    meta:{type:"tag", text:"Good sign · not a full inspection", color:"var(--teal-ink)", bg:"var(--teal-soft)"},
+    ctas:[{label:"Make buyer report", action:"report", primary:true},{label:"Scan again after a test drive", action:"rescan"}],
+    work:{},
+    drawers:{
+      why:"All three code lists came back empty, and the readiness monitors are complete. Complete self-tests take 50–100 miles to finish, so this can't be a freshly-cleared computer.",
+      evidence:["Stored codes · none","Pending codes · none","Permanent codes · none","Readiness · all complete"],
+      bytes:"mode 03 → 43 00\nmode 07 → 47 00\nmode 0A → 4A 00\nmode 01 01 → 41 01 00 07 FF 00  (monitors complete)",
+      notChecked:SCOPE_ITEMS,
+    },
+    ledger:[
+      ["No stored / pending / permanent codes.","raw_obd · direct",true],
+      ["Self-tests all complete.","readiness · direct",true],
+      ["Not a recently-cleared computer.","rules · strong",false],
+      ["Engine clearance, not whole-car.","rules · scope",true],
+    ],
+    report:{intro:"Here's the honest read on this car's engine — and what I couldn't get to.",title:"Pre-purchase scan — engine & emissions",
+      found:["No stored, pending, or permanent codes","Self-tests complete → the reading is current"],
+      notChecked:["Brakes / ABS","Airbags / SRS","Steering","Tires, suspension, frame"],
+      next:["Short test drive","Mechanic physical inspection before purchase"],
+      sig:"Clean for the engine. Get a human to look at the rest. — Copilot"},
+  },
+
+  buyer_recent_clear:{
+    label:"Buyer · likely recently cleared (hero)",
+    veh:"2017 Honda Civic", miles:"92,000 mi",
+    section:"Pre-purchase scan",
+    headline:"Don't treat this as clean yet", sub:null, color:"var(--amber-2)",
+    finding:null,
+    explain:"No engine codes came back, but the car's self-tests are not finished. That often happens after codes were cleared or the battery was disconnected.",
+    meta:{type:"tag", text:"Buyer risk · rescan after driving", color:"var(--amber-ink)", bg:"var(--amber-soft)"},
+    ctas:[{label:"Ask the seller", action:"seller", primary:true},{label:"Make buyer report", action:"report"}],
+    work:{
+      seller:["\"Was the battery disconnected recently?\"","\"Were any codes or the check-engine light cleared?\"","\"Can we drive it 30–50 miles and scan it again?\""],
+    },
+    drawers:{
+      why:"Clearing codes (or pulling the battery) wipes both the codes AND the self-test progress. Seeing zero codes while the self-tests are unfinished is the fingerprint of a recent reset.",
+      evidence:["Stored codes · none","Pending codes · none","Permanent codes · none","Readiness · 4 self-tests NOT ready"],
+      bytes:"mode 03 → 43 00\nmode 07 → 47 00\nmode 0A → 4A 00\nmode 01 01 → 41 01 00 04 00 00  (4 monitors NOT ready)",
+      notChecked:SCOPE_ITEMS,
+    },
+    ledger:[
+      ["No stored codes right now.","raw_obd · direct",true],
+      ["4 of 8 self-tests not ready.","readiness · direct",true],
+      ["Pattern: recent clear suspected.","rules · strong",false],
+      ["Rescan after a 30–50 mi drive.","rules · strong",false],
+      ["Not checked: brakes / airbags / …","rules · scope",true],
+    ],
+    report:{intro:"Read this part first — it's the reason I'd pause on this car.",title:"Pre-purchase scan — ⚠ read this first",
+      found:["No codes — BUT self-tests incomplete (4 of 8 not ready)","Pattern consistent with a recent clear / battery reset"],
+      notChecked:["Brakes / ABS","Airbags / SRS","Steering","Whether a real fault is being masked"],
+      next:["Ask the seller about recent clears / battery work","Drive 30–50 miles, then rescan","Do not treat current 'no codes' as clean"],
+      sig:"No codes isn't the same as no problems. I'd want a rescan before trusting this. — Copilot"},
+  },
+
+  emergency:{
+    label:"Owner · emergency (overheating)",
+    veh:"2009 Toyota Corolla", miles:"152,000 mi",
+    section:"Live reading",
+    headline:"Pull over now", sub:"Do not drive", color:"var(--severe)",
+    finding:null,
+    explain:"Coolant is 231°F and climbing. Stop driving and let the engine cool. If you keep going, you can warp the head.",
+    meta:{type:"tag", text:"Tow · shop only", color:"var(--severe-ink)", bg:"var(--severe-soft)"},
+    ctas:[{label:"Show me what to do", action:"fix", primary:true, sev:true}],
+    work:{
+      fix:["Pull over somewhere safe as soon as you can.","Shut the engine off — don't let it idle.","Wait at least 30 minutes for it to cool. Don't open the radiator cap hot.","Once cold, check the coolant level. If it climbs again when you restart, don't drive it — call a tow."],
+    },
+    drawers:{
+      why:"This is a live-reading emergency — the temperature is past the safe range right now. It fires above the diagnosis logic, so it doesn't wait for a trouble code to set.",
+      evidence:["Coolant · 231°F · past safe range","No stored codes — this is a live alert"],
+      bytes:"mode 01 05 → 41 05 9F  (≈119°C / 231°F, emergency ≥ 115°C)",
+      notChecked:["Brakes / ABS","Airbags / SRS","Root cause of overheating (needs a physical look)"],
+    },
+    ledger:[
+      ["Coolant 231°F and climbing.","raw_obd · direct",true],
+      ["Hot enough to warp the engine.","rules · direct",true],
+      ["Stop, cool, check coolant.","rules · fixed safety",true],
+      ["Not checked: brakes / airbags / …","rules · scope",true],
+    ],
+  },
+};
+
+const $=id=>document.getElementById(id);
+let cur="owner_misfire", timers=[];
+const clearTimers=()=>{timers.forEach(t=>clearTimeout(t));timers=[];};
+
+function buildPicker(){
+  const sel=$("scenario");sel.innerHTML="";
+  Object.entries(SC).forEach(([k,v])=>{const o=document.createElement("option");o.value=k;o.textContent=v.label;sel.appendChild(o);});
+  sel.value=cur;
+  sel.onchange=()=>{cur=sel.value;run();};
+}
+
+function run(){
+  clearTimers();
+  const s=SC[cur];
+  $("vehName").textContent=s.veh; $("vehMiles").textContent=s.miles;
+  $("ledger").style.display=""; renderLedger(s);
+  $("overlay").classList.remove("open");
+  // brief, honest loading — not a reasoning trace
+  $("stage").innerHTML=`<div class="loading">
+    <div class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v1a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/></svg></div>
+    <div class="lt">Reading your car…</div>
+    <div class="bar"><i></i></div></div>`;
+  timers.push(setTimeout(()=>renderCard(s),1450));
+}
+
+function renderCard(s){
+  const m=s.meta;
+  const metaHTML = m.type==="specs"
+    ? `<div class="meta">${m.specs.map(x=>`<span class="chip">${x}</span>`).join("")}</div>`
+    : `<div class="tag" style="color:${m.color};background:${m.bg}"><span class="td"></span>${m.text}</div>`;
+  const ctaHTML = s.ctas.map((c,i)=>
+    `<button class="cta${c.primary?" primary":""}${c.sev?" sev":""}" data-act="${c.action}">${c.label}<span class="arr">${c.action==='rescan'?'↻':'→'}</span></button>`).join("");
+  const findingHTML = s.finding?`<div class="finding">${s.finding}</div>`:"";
+  const subHTML = s.sub?`<div class="subhead">${s.sub}</div>`:"";
+
+  // drawers
+  const d=s.drawers;
+  const evRows=d.evidence.map(r=>`<div class="r">${r}</div>`).join("");
+  const bytesBlock=d.bytes?`<div class="bytelink" id="bytelink">technical bytes ▾</div><div class="bytes" id="bytes">${d.bytes}</div>`:"";
+  const notRows=d.notChecked.map(x=>`<span>${x}</span>`).join("");
+  const drawersHTML=`
+    <div class="drawers">
+      <div class="drawer" data-d="why"><div class="dh">Why I'm saying this<span class="car">▾</span></div><div class="db"><div class="why">${d.why}</div></div></div>
+      <div class="drawer" data-d="ev"><div class="dh">Evidence for a mechanic<span class="car">▾</span></div><div class="db"><div class="rows">${evRows}</div>${bytesBlock}</div></div>
+      <div class="drawer" data-d="not"><div class="dh">What this scan did not check<span class="car">▾</span></div><div class="db"><div class="nots">${notRows}</div></div></div>
+    </div>`;
+
+  $("stage").innerHTML=`
+    <div class="card">
+      <div class="section">${s.section}</div>
+      <div class="headwrap" style="border-color:${s.color}">
+        <div class="headline" style="color:${s.color}">${s.headline}</div>${subHTML}
+      </div>
+      ${findingHTML}
+      <div class="explain">${s.explain}</div>
+      ${metaHTML}
+      <div class="ctas">${ctaHTML}</div>
+      <div id="workslot"></div>
+      ${drawersHTML}
+    </div>`;
+
+  // drawer toggles
+  $("stage").querySelectorAll(".drawer .dh").forEach(h=>h.onclick=()=>h.parentElement.classList.toggle("open"));
+  // wire byte sub-toggle after evidence drawer exists
+  const bl=$("bytelink");
+  if(bl)bl.onclick=()=>{const b=$("bytes");b.classList.toggle("open");bl.textContent=b.classList.contains("open")?"technical bytes ▴":"technical bytes ▾";};
+  // CTAs
+  $("stage").querySelectorAll(".cta").forEach(b=>b.onclick=()=>doAction(b.dataset.act,b));
+}
+
+function doAction(act,btn){
+  const s=SC[cur], slot=$("workslot");
+  if(act==="rescan"){run();return;}
+  if(act==="report"){openReport(s);return;}
+  // toggle work panel
+  if(slot.dataset.open===act){slot.innerHTML="";slot.dataset.open="";return;}
+  slot.dataset.open=act;
+  let html="";
+  if(act==="fix"){
+    html=`<div class="work"><div class="wh">${cur==='emergency'?'What to do':'The fix'}</div><ol>${s.work.fix.map(x=>`<li>${x}</li>`).join("")}</ol></div>`;
+  } else if(act==="mechanic"){
+    html=`<div class="work"><div class="wh">Message for your shop</div><div class="draft">${s.work.mechanic}</div><button class="copy">Copy message</button></div>`;
+  } else if(act==="seller"){
+    html=`<div class="work"><div class="wh">Ask the seller — word for word</div><div class="sellerq">${s.work.seller.map(x=>`<div>${x}</div>`).join("")}</div></div>`;
+  }
+  slot.innerHTML=html;
+  const cp=slot.querySelector(".copy");
+  if(cp)cp.onclick=()=>{cp.textContent="Copied ✓";timers.push(setTimeout(()=>cp.textContent="Copy message",1400));};
+}
+
+function renderLedger(s){
+  $("ledger").innerHTML=`<div class="lh">Data contract underneath (internal — not shown to users)</div>`+
+    s.ledger.map(([t,m,fixed])=>`<div class="lr"><div class="lt">${t}</div><div class="lm">${m} · <span class="${fixed?'fx':''}">${fixed?'fixed':'AI-phrased'}</span></div></div>`).join("");
+}
+
+function openReport(s){
+  if(!s.report)return;
+  const r=s.report, now=new Date();
+  const grp=(h,arr,dot)=>`<div class="rgroup"><div class="rg-h">${h}</div>${arr.map(x=>`<div class="rline"><span class="rdot" style="background:${dot}"></span><span>${x}</span></div>`).join("")}</div>`;
+  $("sheet").innerHTML=`
+    <h2>${r.title}</h2>
+    <div class="rmeta">${s.veh} · ${s.miles} · ${now.toLocaleDateString()} · #${(Math.floor(now.getTime()/1000)%100000).toString(16).toUpperCase()}</div>
+    <div class="intro">${r.intro}</div>
+    <span class="badge">✓ raw evidence included</span><span class="badge">✓ readiness status</span><span class="badge">✓ scope stated</span>
+    ${grp("What I found",r.found,"var(--amber)")}
+    ${grp("What this scan did NOT check",r.notChecked,"var(--muted)")}
+    ${grp("What I'd do next",r.next,"var(--teal)")}
+    <div class="sig">${r.sig}</div>
+    <button class="close" id="closeSheet">Close</button>`;
+  $("overlay").classList.add("open");
+  $("closeSheet").onclick=()=>$("overlay").classList.remove("open");
+}
+
+$("debug").onchange=e=>document.body.classList.toggle("debug",e.target.checked);
+$("replayTop").onclick=run;
+$("overlay").onclick=e=>{if(e.target.id==="overlay")$("overlay").classList.remove("open");};
+
+buildPicker();run();
+</script>
+</body>
+</html>
